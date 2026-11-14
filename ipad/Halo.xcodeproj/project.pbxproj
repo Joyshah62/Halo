@@ -52,6 +52,7 @@
 		A1B2C3D4E5F60718293A4B07 /* Navigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigator.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B05 /* Welcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Welcome.swift; sourceTree = "<group>"; };
 		B0E9BA2C280A2D8702ACD05D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		51C0FF1600000000000000A1 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		B2FC2951B91C98E244D3173F /* DocumentRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentRepository.swift; sourceTree = "<group>"; };
 		C1F2C1C5EF4C4853344B93EE /* Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Audio.swift; sourceTree = "<group>"; };
 		DE4617D955258334FD96570F /* Caveat-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Caveat-OFL.txt"; sourceTree = "<group>"; };
@@ -93,6 +94,7 @@
 				F533F5381A4ADE17943FAEE0 /* SettingsView.swift */,
 				F050D679146CCE25B8B754D0 /* StudyStore.swift */,
 				B0E9BA2C280A2D8702ACD05D /* Info.plist */,
+				51C0FF1600000000000000A1 /* Signing.xcconfig */,
 				3B91224C671A3400805ED16F /* Resources */,
 			);
 			path = Halo;
@@ -232,10 +234,10 @@
 /* Begin XCBuildConfiguration section */
 		5A8C91857F674E16E2724F47 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 51C0FF1600000000000000A1 /* Signing.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = UT5NY3NS85;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Halo/Info.plist;
@@ -245,7 +247,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.joyshah.halo;
 				PRODUCT_NAME = Halo;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -349,10 +350,10 @@
 		};
 		E9B2E96ABC5F6856F2BE79CF /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 51C0FF1600000000000000A1 /* Signing.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = UT5NY3NS85;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Halo/Info.plist;
@@ -362,7 +363,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.joyshah.halo;
 				PRODUCT_NAME = Halo;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;

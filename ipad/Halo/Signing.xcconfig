@@ -1,0 +1,6 @@
+// Shared signing defaults. To build with your own Apple team, create
+// Signing.local.xcconfig beside this file (it is gitignored) and set
+// DEVELOPMENT_TEAM and PRODUCT_BUNDLE_IDENTIFIER there.
+DEVELOPMENT_TEAM = UT5NY3NS85
+PRODUCT_BUNDLE_IDENTIFIER = com.joyshah.halo
+#include? "Signing.local.xcconfig"

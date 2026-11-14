@@ -9,5 +9,6 @@ ipad/.swiftpm/
 ipad/DerivedData/
 **/xcuserdata/
 *.xcuserstate
+ipad/Halo/Signing.local.xcconfig
 
 voice-samples/

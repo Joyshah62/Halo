@@ -55,7 +55,7 @@ xcrun simctl launch <udid> dev.halo.ipad --sample --live --page 2 \
 1. Install **full Xcode 16 or newer** and its iOS simulator SDK. Command Line Tools alone cannot build the UI.
 2. Open [`Halo.xcodeproj`](Halo.xcodeproj).
 3. Select the **Halo** scheme and an iPad simulator, then Run.
-4. For a physical iPad, choose your development team under Signing & Capabilities, change the bundle identifier if needed, and select the connected iPad.
+4. For a physical iPad, select the connected iPad. Signing lives in [`Halo/Signing.xcconfig`](Halo/Signing.xcconfig), not in the project file. To build with your own Apple team, create `Halo/Signing.local.xcconfig` (gitignored) with your own `DEVELOPMENT_TEAM` and `PRODUCT_BUNDLE_IDENTIFIER`. Do not pick a team under Signing & Capabilities: Xcode would write it into the project and override the file for everyone.
 5. Tap **Try an offline sample lesson**, or import a PDF.
 
 The deployment target is **iPadOS 17+**. There are no third-party Swift dependencies. The app target compiles `Sources/HaloCore` directly; the same files are a separate Swift package for host-side validation.
