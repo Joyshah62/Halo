@@ -184,8 +184,6 @@ struct HaloMargin: View {
                 }
                 Circle().fill(micColor).frame(width: size, height: size)
                 Image(systemName: micSymbol).font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(micForeground)
-                    .rotationEffect(.degrees(spinning ? 360 : 0))
-                    .animation(spinning ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: spinning)
             }.frame(width: size + 6, height: size + 6)
         }.buttonStyle(.plain).accessibilityLabel(micLabel)
     }
@@ -232,7 +230,6 @@ struct HaloMargin: View {
     private var micSymbol: String {
         switch store.pill { case .thinking: return "circle.dotted"; case .speaking: return "speaker.wave.2.fill"; default: return "mic.fill" }
     }
-    private var spinning: Bool { if case .thinking = store.pill { return true }; return false }
     private var micLabel: String { if case .listening = store.pill { return "Stop listening" }; return "Ask by voice" }
 }
 
