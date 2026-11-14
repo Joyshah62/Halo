@@ -1,0 +1,398 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+        ABCDEF123456789000000001 /* Lesson.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEF123456789000000002 /* Lesson.swift */; };
+        ABCDEF123456789000000003 /* TutorAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEF123456789000000004 /* TutorAvatar.swift */; };
+		1FF04BE2E2E755335B73C11F /* PDFCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 078A0895B919DC771B8F8CDC /* PDFCapture.swift */; };
+		2879C39E241412AD34B5FCF9 /* Caveat.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FD60BEB470EB9E46589460DB /* Caveat.ttf */; };
+		2A98B3FBD57AC0F4EC88B4A0 /* HaloClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C8E44B9A884201A4ECAC0A0 /* HaloClient.swift */; };
+		3F832B63908D4EBBB64D7E63 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FBA355607BF850C47E6F154 /* Models.swift */; };
+		6D5DECCC7C7FEEDACC1B38C1 /* PDFReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 651607E7E52098E4251670F5 /* PDFReader.swift */; };
+		77EA2F5C945E91FF03D20C23 /* Caveat-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = DE4617D955258334FD96570F /* Caveat-OFL.txt */; };
+		9E88817E235017496D8139E4 /* DocumentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2FC2951B91C98E244D3173F /* DocumentRepository.swift */; };
+		A1B2C3D4E5F60718293A4B02 /* MarginInk.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B01 /* MarginInk.swift */; };
+		A1B2C3D4E5F60718293A4B04 /* ThreadPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B03 /* ThreadPill.swift */; };
+		A1B2C3D4E5F60718293A4B0A /* Recap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B09 /* Recap.swift */; };
+		A1B2C3D4E5F60718293A4C0A /* Notebook.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4C09 /* Notebook.swift */; };
+		A1B2C3D4E5F60718293A4D0A /* Landing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4D09 /* Landing.swift */; };
+		A1B2C3D4E5F60718293A4E0A /* Dive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4E09 /* Dive.swift */; };
+		A1B2C3D4E5F60718293A4F0A /* Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4F09 /* Design.swift */; };
+		A1B2C3D4E5F60718293A4B08 /* Navigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B07 /* Navigator.swift */; };
+		A1B2C3D4E5F60718293A4B06 /* Welcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B05 /* Welcome.swift */; };
+		A770FD8F5A02E74861A3967E /* SampleLesson.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BCF2E64F40BE3054B410BF /* SampleLesson.swift */; };
+		AF005EEC2A585D87D873D656 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F533F5381A4ADE17943FAEE0 /* SettingsView.swift */; };
+		D73A1E696439F6299259A213 /* Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F2C1C5EF4C4853344B93EE /* Audio.swift */; };
+		E39F26296498AA6B673CF117 /* HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97A5644DA902678BEDCDE5D9 /* HaloApp.swift */; };
+		FAEB91FEF804C5D46BA78C47 /* StudyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F050D679146CCE25B8B754D0 /* StudyStore.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+        ABCDEF123456789000000002 /* Lesson.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lesson.swift; sourceTree = "<group>"; };
+        ABCDEF123456789000000004 /* TutorAvatar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorAvatar.swift; sourceTree = "<group>"; };
+		078A0895B919DC771B8F8CDC /* PDFCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFCapture.swift; sourceTree = "<group>"; };
+		38A007151ABE87CC01A5B6E9 /* Halo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4C8E44B9A884201A4ECAC0A0 /* HaloClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloClient.swift; sourceTree = "<group>"; };
+		50BCF2E64F40BE3054B410BF /* SampleLesson.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleLesson.swift; sourceTree = "<group>"; };
+		5FBA355607BF850C47E6F154 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		651607E7E52098E4251670F5 /* PDFReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReader.swift; sourceTree = "<group>"; };
+		97A5644DA902678BEDCDE5D9 /* HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloApp.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B01 /* MarginInk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarginInk.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B03 /* ThreadPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadPill.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B09 /* Recap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recap.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4C09 /* Notebook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notebook.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4D09 /* Landing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Landing.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4E09 /* Dive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dive.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4F09 /* Design.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B07 /* Navigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigator.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B05 /* Welcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Welcome.swift; sourceTree = "<group>"; };
+		B0E9BA2C280A2D8702ACD05D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B2FC2951B91C98E244D3173F /* DocumentRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentRepository.swift; sourceTree = "<group>"; };
+		C1F2C1C5EF4C4853344B93EE /* Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Audio.swift; sourceTree = "<group>"; };
+		DE4617D955258334FD96570F /* Caveat-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Caveat-OFL.txt"; sourceTree = "<group>"; };
+		F050D679146CCE25B8B754D0 /* StudyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyStore.swift; sourceTree = "<group>"; };
+		F533F5381A4ADE17943FAEE0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		FD60BEB470EB9E46589460DB /* Caveat.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Caveat.ttf; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		7561BFB015D8F536760CB671 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		3A2A88DEEFF3D1D23E496597 /* Halo */ = {
+			isa = PBXGroup;
+			children = (
+				ABCDEF123456789000000002 /* Lesson.swift */,
+				ABCDEF123456789000000004 /* TutorAvatar.swift */,
+                C1F2C1C5EF4C4853344B93EE /* Audio.swift */,
+				97A5644DA902678BEDCDE5D9 /* HaloApp.swift */,
+				A1B2C3D4E5F60718293A4B09 /* Recap.swift */,
+				A1B2C3D4E5F60718293A4C09 /* Notebook.swift */,
+				A1B2C3D4E5F60718293A4D09 /* Landing.swift */,
+				A1B2C3D4E5F60718293A4E09 /* Dive.swift */,
+				A1B2C3D4E5F60718293A4F09 /* Design.swift */,
+				A1B2C3D4E5F60718293A4B07 /* Navigator.swift */,
+				A1B2C3D4E5F60718293A4B05 /* Welcome.swift */,
+				A1B2C3D4E5F60718293A4B03 /* ThreadPill.swift */,
+				A1B2C3D4E5F60718293A4B01 /* MarginInk.swift */,
+				078A0895B919DC771B8F8CDC /* PDFCapture.swift */,
+				651607E7E52098E4251670F5 /* PDFReader.swift */,
+				50BCF2E64F40BE3054B410BF /* SampleLesson.swift */,
+				F533F5381A4ADE17943FAEE0 /* SettingsView.swift */,
+				F050D679146CCE25B8B754D0 /* StudyStore.swift */,
+				B0E9BA2C280A2D8702ACD05D /* Info.plist */,
+				3B91224C671A3400805ED16F /* Resources */,
+			);
+			path = Halo;
+			sourceTree = "<group>";
+		};
+		3B91224C671A3400805ED16F /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				FD60BEB470EB9E46589460DB /* Caveat.ttf */,
+				DE4617D955258334FD96570F /* Caveat-OFL.txt */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		B28B7AF69320201D1CF206EB = {
+			isa = PBXGroup;
+			children = (
+				3A2A88DEEFF3D1D23E496597 /* Halo */,
+				DCB3E622126A8498E305E230 /* Sources/HaloCore */,
+				BFE00B156DCFC34C4751A6E5 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		BFE00B156DCFC34C4751A6E5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				38A007151ABE87CC01A5B6E9 /* Halo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		DCB3E622126A8498E305E230 /* Sources/HaloCore */ = {
+			isa = PBXGroup;
+			children = (
+				B2FC2951B91C98E244D3173F /* DocumentRepository.swift */,
+				4C8E44B9A884201A4ECAC0A0 /* HaloClient.swift */,
+				5FBA355607BF850C47E6F154 /* Models.swift */,
+			);
+			path = Sources/HaloCore;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0E8A3AD980EC179856012B7E /* Halo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F37922C48DA5978D02C9E50E /* Build configuration list for PBXNativeTarget "Halo" */;
+			buildPhases = (
+				BCE16DD0260827ECF338C787 /* Sources */,
+				7561BFB015D8F536760CB671 /* Frameworks */,
+				0189424A5A60FED329FA868E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Halo;
+			productName = Halo;
+			productReference = 38A007151ABE87CC01A5B6E9 /* Halo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2720;
+				TargetAttributes = {
+					0E8A3AD980EC179856012B7E = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 862894B703A6DEDF96A9DD6C /* Build configuration list for PBXProject "Halo" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = B28B7AF69320201D1CF206EB;
+			productRefGroup = BFE00B156DCFC34C4751A6E5 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0E8A3AD980EC179856012B7E /* Halo */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0189424A5A60FED329FA868E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2879C39E241412AD34B5FCF9 /* Caveat.ttf in Resources */,
+				77EA2F5C945E91FF03D20C23 /* Caveat-OFL.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BCE16DD0260827ECF338C787 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ABCDEF123456789000000001 /* Lesson.swift in Sources */,
+				ABCDEF123456789000000003 /* TutorAvatar.swift in Sources */,
+                D73A1E696439F6299259A213 /* Audio.swift in Sources */,
+				E39F26296498AA6B673CF117 /* HaloApp.swift in Sources */,
+				A1B2C3D4E5F60718293A4B0A /* Recap.swift in Sources */,
+				A1B2C3D4E5F60718293A4C0A /* Notebook.swift in Sources */,
+				A1B2C3D4E5F60718293A4D0A /* Landing.swift in Sources */,
+				A1B2C3D4E5F60718293A4E0A /* Dive.swift in Sources */,
+				A1B2C3D4E5F60718293A4F0A /* Design.swift in Sources */,
+				A1B2C3D4E5F60718293A4B08 /* Navigator.swift in Sources */,
+				A1B2C3D4E5F60718293A4B06 /* Welcome.swift in Sources */,
+				A1B2C3D4E5F60718293A4B04 /* ThreadPill.swift in Sources */,
+				A1B2C3D4E5F60718293A4B02 /* MarginInk.swift in Sources */,
+				1FF04BE2E2E755335B73C11F /* PDFCapture.swift in Sources */,
+				6D5DECCC7C7FEEDACC1B38C1 /* PDFReader.swift in Sources */,
+				A770FD8F5A02E74861A3967E /* SampleLesson.swift in Sources */,
+				AF005EEC2A585D87D873D656 /* SettingsView.swift in Sources */,
+				FAEB91FEF804C5D46BA78C47 /* StudyStore.swift in Sources */,
+				9E88817E235017496D8139E4 /* DocumentRepository.swift in Sources */,
+				2A98B3FBD57AC0F4EC88B4A0 /* HaloClient.swift in Sources */,
+				3F832B63908D4EBBB64D7E63 /* Models.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		5A8C91857F674E16E2724F47 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UT5NY3NS85;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Halo/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joyshah.halo;
+				PRODUCT_NAME = Halo;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+		89E1FD6268CC0F221A2BE178 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E6DE6C99132752C914FEF632 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E9B2E96ABC5F6856F2BE79CF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UT5NY3NS85;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Halo/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joyshah.halo;
+				PRODUCT_NAME = Halo;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		862894B703A6DEDF96A9DD6C /* Build configuration list for PBXProject "Halo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				89E1FD6268CC0F221A2BE178 /* Debug */,
+				E6DE6C99132752C914FEF632 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F37922C48DA5978D02C9E50E /* Build configuration list for PBXNativeTarget "Halo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E9B2E96ABC5F6856F2BE79CF /* Debug */,
+				5A8C91857F674E16E2724F47 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}
