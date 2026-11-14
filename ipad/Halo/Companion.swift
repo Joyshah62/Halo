@@ -14,9 +14,27 @@ struct HaloDock: View {
     var atTop = false
     /// Room for words on the page tools.
     var wide = true
+    /// The page area Halo can be dragged around in.
+    var area: CGSize
     @State private var text = ""
     @FocusState private var focused: Bool
-    init(store: StudyStore, atTop: Bool = false, wide: Bool = true) { self.store = store; self.speech = store.speech; self.atTop = atTop; self.wide = wide }
+    /// Where the student parked Halo, as an offset from its home corner: there may be notes under it.
+    @AppStorage("halo.parkedX") private var parkedX = 0.0
+    @AppStorage("halo.parkedY") private var parkedY = 0.0
+    @GestureState private var drag = CGSize.zero
+    /// The field holds what Halo heard, not something typed.
+    @State private var dictated = false
+    init(store: StudyStore, atTop: Bool = false, wide: Bool = true, area: CGSize) { self.store = store; self.speech = store.speech; self.atTop = atTop; self.wide = wide; self.area = area }
+
+    /// Keeps the avatar on the page, whatever was saved and however the iPad is turned.
+    private func onPage(_ x: Double, _ y: Double) -> CGSize {
+        let margin = max(0, (area.width - 972) / 2), reach = max(0, area.height - 112)
+        return CGSize(width: max(-margin, min(x, area.width - margin - 112)), height: atTop ? max(0, min(y, reach)) : min(0, max(y, -reach)))
+    }
+    private func parked(after drag: CGSize) -> CGSize {
+        let home = onPage(parkedX, parkedY)
+        return onPage(home.width + drag.width, home.height + drag.height)
+    }
 
     private var typed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -26,8 +44,12 @@ struct HaloDock: View {
         }
         .frame(maxWidth: 940, alignment: .leading)
         .padding(.horizontal, 16)
+        // The open bar and menu need the full width, so they open at home; put away, Halo goes back to where it was parked.
+        .offset(store.showDock ? .zero : parked(after: drag))
         .animation(.spring(duration: 0.35, bounce: 0.15), value: focused)
         .onChange(of: store.showLauncher) { _, open in if open { focused = false } }
+        // Spoken words that were sent (or abandoned) don't wait in the field for next time; a typed draft does.
+        .onChange(of: store.showDock) { _, open in if !open, dictated { text = ""; dictated = false } }
     }
 
     /// What opens out of the dock: the menu, ideas for what to ask, or a word from Halo.
@@ -56,8 +78,13 @@ struct HaloDock: View {
     /// The ask field and page tools, slid out from the avatar.
     private var field: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HaloComposer(text: $text, microphone: { store.askAboutPage(store.pageIndex) },
+            HaloComposer(text: $text, prompt: store.dockHeard == nil ? "Ask Halo…" : store.learner.name.isEmpty ? "Hey, I’m listening…" : "Hey \(store.learner.name), I’m listening…",
+                         recording: store.dockHeard != nil,
+                         microphone: { if store.dockHeard != nil { store.stopDockListening() } else { store.askAboutPage(store.pageIndex) } },
                          focus: $focused, send: send)
+                // Words appear in the field as they are heard; touching the field means typing instead.
+                .onChange(of: store.dockHeard) { _, heard in if let heard { text = heard; dictated = true } }
+                .onChange(of: focused) { _, typing in if typing { store.stopDockListening(); dictated = false } }
                 .accessibilityHint("A question about this page, or something to do, like go to page 12 or quiz me")
             ScrollView(.horizontal, showsIndicators: false) {
                 // Its own card: bare icons over a dark page couldn't be seen.
@@ -73,7 +100,8 @@ struct HaloDock: View {
     }
 
     private var avatar: some View {
-        Button { focused = false; store.pokeHalo() } label: {
+        // A tap and a drag on one view: a Button would also fire when a drag ends on it.
+        Group {
             TutorAvatar(cue: store.haloCue, size: 104, voiceLevel: { [store] in store.player.outputLevel }, micLevel: { [speech] in CGFloat(speech.meter.value) })
                 .offset(y: -5)
                 .frame(width: 80, height: 80)
@@ -93,8 +121,18 @@ struct HaloDock: View {
                     }
                 }
         }
-        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .onTapGesture { focused = false; store.pokeHalo() }
+        .gesture(DragGesture(minimumDistance: 10, coordinateSpace: .global)
+            .updating($drag) { value, state, _ in state = value.translation }
+            .onEnded { value in
+                guard !store.showDock else { return }
+                let end = parked(after: value.translation)
+                parkedX = end.width; parkedY = end.height
+            })
+        .accessibilityElement(children: .combine).accessibilityAddTraits(.isButton)
         .accessibilityLabel(store.showDock ? "Put Halo’s bar away" : "Halo. Ask, tools and everything it can do")
+        .accessibilityHint("Drag to move Halo off your notes")
     }
 
     private var tools: some View {
@@ -159,6 +197,7 @@ struct HaloDock: View {
         let asked = typed
         guard !asked.isEmpty else { return }
         text = ""; focused = false
+        store.stopDockListening()
         store.askHalo(asked)
     }
 }

@@ -66,7 +66,7 @@ final class AnswerPlayer: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDe
             try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
                     completion = continuation
-                    if let encoded = step.audio, let data = Data(base64Encoded: encoded), let player = try? AVAudioPlayer(data: data) {
+                    if let encoded = step.audio, let data = Data(base64Encoded: encoded), let player = try? AVAudioPlayer(data: Self.loud(data)) {
                         audio = player; player.delegate = self; player.isMeteringEnabled = true
                         player.prepareToPlay()
                         if player.play() {
@@ -106,6 +106,36 @@ final class AnswerPlayer: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDe
             if utterance != nil, !(error is CancellationError) { systemVoiceUnavailable = true }
             stop(); throw error
         }
+    }
+    /// The voice service's clips arrive very quiet (peaks near -34 dBFS, measured), far below what the volume buttons
+    /// can make up for. Brings the loudest moment of a clip to just under full scale; a clip that is already loud,
+    /// silent or unreadable is played as it came.
+    static func loud(_ data: Data) -> Data {
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp3")
+        let target = source.deletingPathExtension().appendingPathExtension("wav")
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: target) }
+        do {
+            try data.write(to: source)
+            let file = try AVAudioFile(forReading: source)
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)) else { return data }
+            try file.read(into: buffer)
+            guard let samples = buffer.floatChannelData, buffer.frameLength > 0 else { return data }
+            let channels = Int(buffer.format.channelCount), count = Int(buffer.frameLength)
+            var peak: Float = 0
+            for channel in 0..<channels { for index in 0..<count { peak = max(peak, abs(samples[channel][index])) } }
+            // Below 0.0005 there is nothing but noise to amplify; above 0.7 there is nothing to gain.
+            guard peak > 0.0005, peak < 0.7 else { return data }
+            let gain = 0.9 / peak
+            for channel in 0..<channels { for index in 0..<count { samples[channel][index] *= gain } }
+            do {
+                // The file is only complete on disk once this goes out of scope.
+                let written = try AVAudioFile(forWriting: target, settings: [
+                    AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: buffer.format.sampleRate, AVNumberOfChannelsKey: channels,
+                    AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false])
+                try written.write(from: buffer)
+            }
+            return try Data(contentsOf: target)
+        } catch { return data }
     }
     private func armWatchdog(seconds: Double, token: UUID) {
         watchdog?.cancel()

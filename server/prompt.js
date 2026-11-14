@@ -113,7 +113,7 @@ export function describeLearner(learner) {
 Personalize quietly: match the depth to their level and the style they prefer; if one of their recent weak spots is the same idea as this question, connect it in a phrase ("same move as the chain rule thing you asked about"); use their first name at most once per answer and only where a tutor naturally would. Never recite this profile back.`;
 }
 
-export function buildUserText({ question, pageTitle, pageUrl, circledText, pageText, previousAnswer, tutorMode, selectionMode, learner, pointing }) {
+export function buildUserText({ question, pageTitle, pageUrl, circledText, pageText, documentText, previousAnswer, tutorMode, selectionMode, learner, pointing }) {
   const parts = [];
   const who = describeLearner(learner);
   if (who) parts.push(who);
@@ -123,6 +123,7 @@ export function buildUserText({ question, pageTitle, pageUrl, circledText, pageT
   if (circledText) parts.push(`Text inside the selected section (from the DOM, may be empty for canvas sites):\n${circledText}`);
   if (previousAnswer) parts.push(`Previous Halo answer for this follow-up:\n${previousAnswer}`);
   if (pageText) parts.push(`Page text (for context, trimmed):\n${pageText}`);
+  if (documentText) parts.push(`The question is about the whole document, not only the page on screen. Answer from this text sampled across the whole document (page numbers in brackets, trimmed):\n${documentText}`);
   parts.push(`Student's question: "${question}"`);
   if (pointing && pageText) parts.push(`Reminder: mark the printed page as you go. At least two steps carry a {"type":"point","quote":"<copied exactly from the page text above>","style":...}. Each written "text" is a complete thought (40–90 characters) that still makes sense when reread without your voice.`);
   parts.push(`Respond in strict NDJSON as specified.`);

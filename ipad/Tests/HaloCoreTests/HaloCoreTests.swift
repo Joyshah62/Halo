@@ -15,6 +15,18 @@ final class HaloCoreChecks {
         try expectNil(PageRegion(x: 0, y: 0, width: 0, height: 1))
         try expectNil(PageRegion.drag(fromX: 0, fromY: 0, toX: 1, toY: 1, pageWidth: 0, pageHeight: 100))
     }
+    func testDocumentQuestionsAndSampling() throws {
+        try expect(AskRequest.isAboutDocument("Give me an overview of the document"))
+        try expect(AskRequest.isAboutDocument("Summarise this book"))
+        try expect(!AskRequest.isAboutDocument("Why does x cancel here?"))
+        try expect(!AskRequest.isAboutDocument("Summarise this page"))
+        let short = AskRequest.sample(pageCount: 3, budget: 900) { $0 == 1 ? "  " : String(repeating: "a", count: 500) }
+        try expectEqual(short, "[Page 1] " + String(repeating: "a", count: 300) + "\n\n[Page 3] " + String(repeating: "a", count: 300))
+        let long = AskRequest.sample(pageCount: 800, budget: 24000) { "p\($0 + 1)" }
+        try expectEqual(long.components(separatedBy: "\n\n").count, 80)
+        try expect(long.hasPrefix("[Page 1] p1") && long.hasSuffix("[Page 791] p791"))
+        try expectEqual(AskRequest.sample(pageCount: 0) { _ in "x" }, "")
+    }
     func testSSECommentsCRLFAndMultilineJSON() throws {
         var decoder = EventDecoder()
         try expectNil(try decoder.consume(": keepalive\r"))
@@ -139,6 +151,7 @@ private func expectThrows<T>(_ expression: @autoclosure () throws -> T) throws {
     static func run() async throws {
         let checks = HaloCoreChecks()
         try checks.testReverseCropAndClamping(); print("PASS: normalized crop geometry")
+        try checks.testDocumentQuestionsAndSampling(); print("PASS: whole-document questions and sampling")
         try checks.testSSECommentsCRLFAndMultilineJSON(); print("PASS: streaming SSE decoding")
         try checks.testSSEFailureAndUnknownEvents(); print("PASS: stream failures and unknown events")
         try checks.testRequestPreservesFollowUpAndScope(); print("PASS: follow-up request compatibility")

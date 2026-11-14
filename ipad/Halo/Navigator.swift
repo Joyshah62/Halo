@@ -172,6 +172,8 @@ struct NavigatorView: View {
     @StateObject private var search = BookSearch()
     @State private var expanded: Set<Int> = []
     @FocusState private var searchFocused: Bool
+    /// How far from the bottom edge the list starts to fade.
+    private static let fade: CGFloat = 44
     private var query: String { store.navigatorQuery.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var notes: [StudySession] {
         store.notes.sessions.filter { !$0.messages.isEmpty }.sorted { ($0.pageIndex, $0.number) < ($1.pageIndex, $1.number) }
@@ -201,9 +203,17 @@ struct NavigatorView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                // A card cut off by the bottom edge (always, once the keyboard is up) fades out instead of ending in
+                // a square edge under the popover's round corners.
+                .contentMargins(.bottom, Self.fade, for: .scrollContent)
+                .mask(VStack(spacing: 0) {
+                    Color.black
+                    // Eased, not linear: a straight ramp shows a line where it starts and goes grey too early.
+                    LinearGradient(stops: [(1, 0), (0.94, 0.2), (0.76, 0.42), (0.45, 0.64), (0.16, 0.84), (0, 1)].map { .init(color: .black.opacity($0.0), location: $0.1) },
+                                   startPoint: .top, endPoint: .bottom).frame(height: Self.fade)
+                })
             }
-            .background(DeskPaper())
-            .padding(.bottom, 16)
+            .background(DeskPaper().ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
