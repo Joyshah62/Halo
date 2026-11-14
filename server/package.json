@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node --no-warnings index.js",
-    "dev": "node --no-warnings --watch-path=./index.js --watch-path=./prompt.js --watch-path=./llm.js --watch-path=./tts.js --watch-path=./db.js --watch-path=./tutor.js --watch-path=./mathcheck.js --watch-path=./web.js --watch-path=./steps.js --watch-path=./lesson.js --watch-path=./lesson-material.js --watch-path=./stuck.js --watch-path=./learner-memory.js index.js",
+    "dev": "node --no-warnings --watch-preserve-output --watch-path=./index.js --watch-path=./prompt.js --watch-path=./llm.js --watch-path=./tts.js --watch-path=./db.js --watch-path=./tutor.js --watch-path=./mathcheck.js --watch-path=./web.js --watch-path=./steps.js --watch-path=./lesson-store.js --watch-path=./lesson.js --watch-path=./lesson-material.js --watch-path=./logging.js --watch-path=./sse.js --watch-path=./documents.js --watch-path=./stuck.js --watch-path=./learner-memory.js index.js",
     "test": "HALO_MEMORY_DIR=${TMPDIR:-/tmp}/halo-test-memory node --no-warnings --test *.test.mjs"
   },
   "keywords": [],
@@ -19,6 +19,7 @@
     "@langchain/google": "^0.2.15",
     "@langchain/google-genai": "^2.3.6",
     "@langchain/langgraph": "^1.7.3",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.1.0",
     "cors": "^2.8.6",
     "deepagents": "^1.16.5",
     "dotenv": "^18.0.10",

@@ -87,7 +87,7 @@ export async function generateImage(prompt) {
     const r = await ai.models.generateContent({
       model: IMAGE_MODEL,
       contents: IMAGE_STYLE + prompt,
-      config: { responseModalities: ["IMAGE", "TEXT"] },
+      config: { responseModalities: ["IMAGE", "TEXT"], httpOptions: { timeout: 20000 } },
     });
     const part = (r.candidates?.[0]?.content?.parts || []).find((p) => p.inlineData);
     if (!part) return null;

@@ -68,7 +68,7 @@ Use exactly this shape:
 
 Three or four sections like that, in the order a good teacher would say them, then three last lines:
 TAKEAWAY: <the one sentence to remember>
-NEXT: <three questions a curious student would ask next, each one step deeper than this answer and no more than 8 words, separated by " | ">
+NEXT: <three questions a curious student would ask next, each one step deeper than this answer and no more than 7 words, separated by " | ">
 SAY: <two short spoken sentences that give the heart of it, as if said out loud to the student>`;
 
 function parseAnswer(text) {

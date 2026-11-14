@@ -20,8 +20,9 @@
 // grade  Judges the answer against what a right answer contains; re-explains differently after a miss, answers
 //        the student's own question if that is what came back, then puts a smaller question to them.
 // wrap   Writes the summary: what they nailed, what to revisit, the one thing to remember.
-import { StateGraph, Annotation, START, END, MemorySaver, interrupt, Command } from "@langchain/langgraph";
+import { StateGraph, Annotation, START, END, interrupt, Command } from "@langchain/langgraph";
 import { randomUUID } from "node:crypto";
+import { lessonSaver, cachedLessonReply, saveLessonReply } from "./lesson-store.js";
 import { streamText, generateJSON } from "./llm.js";
 import { speak } from "./tts.js";
 import { describeLearner } from "./prompt.js";
@@ -47,9 +48,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // What a person says in the second after you answer them, before they have worked out their reply.
 // The app plays one the moment the student answers, so there is no dead air while the model thinks.
+// Rules: short and warm; no trailing "..." (the voice drags it into "okaaay"); no "let me think" (sounds like a
+// machine stalling); and an "answer" line must not hint at right or wrong, because the grade isn't in yet.
 const FILLERS = [
-  { kind: "guess", say: "Okay... hold that thought." }, { kind: "guess", say: "Interesting. Let's see." }, { kind: "guess", say: "Alright, let's find out." },
-  { kind: "answer", say: "Mm, okay..." }, { kind: "answer", say: "Hmm, let me think about that." }, { kind: "answer", say: "Okay, so..." },
+  { kind: "guess", say: "Ooh, interesting guess." }, { kind: "guess", say: "Nice, let's find out." }, { kind: "guess", say: "Good instinct. Let's see." },
+  { kind: "guess", say: "I like where you're going." }, { kind: "guess", say: "Fair guess. Let's test it." },
+  { kind: "answer", say: "Got it. Let's check." }, { kind: "answer", say: "Alright, let's look at that." }, { kind: "answer", say: "Okay, let's see how that holds up." },
+  { kind: "answer", say: "Right, let's walk through it." }, { kind: "answer", say: "Good, let's check it together." },
 ];
 let fillerVoices;
 function fillers() {
@@ -518,7 +523,7 @@ export const lessonGraph = new StateGraph(LessonState)
   .addEdge("ask", "grade")
   .addConditionalEdges("grade", afterGrade, { ask: "ask", open: "open_concept", teach: "teach", wrap: "wrap" })
   .addEdge("wrap", END)
-  .compile({ checkpointer: new MemorySaver() });
+  .compile({ checkpointer: lessonSaver });
 
 const settings = (id) => ({ configurable: { thread_id: id }, streamMode: "custom", runName: "halo-lesson", tags: ["halo", "lesson"] });
 
@@ -554,8 +559,8 @@ const active = new Map();
 const replies = new Map();
 export async function continueLesson(id, reply, send) {
   const key = `${id}:${reply.requestID || ""}`;
-  if (reply.requestID && replies.has(key)) {
-    const cached = replies.get(key);
+  const cached = reply.requestID ? replies.get(key) || cachedLessonReply(key) : undefined;
+  if (cached) {
     for (const [event, data] of cached.events) send(event, data);
     return cached.result;
   }
@@ -576,7 +581,9 @@ export async function continueLesson(id, reply, send) {
     const paused = snapshot.tasks?.some((t) => t.interrupts?.length);
     const result = await run(id, paused ? new Command({ resume: reply }) : null, (event, data) => { events.push([event, data]); send(event, data); });
     if (reply.requestID) {
-      replies.set(key, { events, result });
+      const completed = { events, result };
+      saveLessonReply(key, completed);
+      replies.set(key, completed);
       // Audio is large; retain only recent retries.
       while (replies.size > 64) replies.delete(replies.keys().next().value);
     }

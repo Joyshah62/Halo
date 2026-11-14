@@ -6,22 +6,26 @@
 //  - request stitching: each step is told what was already said (`previous_text`),
 //    so its intonation continues the sentence before instead of resetting.
 const KEY = process.env.ELEVENLABS_API_KEY;
-// Hailey: a calm, close, soft conversational voice (shared library). Kleo was fZboLjcdZSF1lt1yyuXM.
-const VOICE = process.env.ELEVENLABS_VOICE_ID || "VrUPKj92idNr4XrmO032";
+// Hope: young, natural, clear and calm (shared library). Alexandra was kdmDKE6EkgrWrrykO9Qt;
+// Hailey (VrUPKj92idNr4XrmO032) had audible background noise baked into the voice. Kleo was fZboLjcdZSF1lt1yyuXM.
+const VOICE = process.env.ELEVENLABS_VOICE_ID || "OYTbf65OHHFELVut7v2H";
+// v3 models drift in accent; an audio tag holds it. It steers delivery and is not read aloud. Set empty to turn off.
+const ACCENT = (process.env.ELEVENLABS_ACCENT ?? "American").trim();
 const SPEED = Math.min(1.2, Math.max(0.7, Number(process.env.ELEVENLABS_SPEED) || 0.92));
-const MODEL = process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2";
+const MODEL = process.env.ELEVENLABS_MODEL_ID || "eleven_v3_conversational";
 const FORMAT = process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128";
 
 export const ttsEnabled = Boolean(KEY);
-export const ttsVoice = { voice: VOICE, model: MODEL, format: FORMAT };
+export const ttsVoice = { voice: VOICE, model: MODEL, format: FORMAT, accent: /_v3/.test(MODEL) ? ACCENT || null : null };
 
 /** @param {string} text  @param {{ previous?: string }} [opts] */
-export async function speak(text, { previous = "" } = {}) {
+export async function speak(text, { previous = "", timeoutMs = 12000 } = {}) {
   if (!KEY) return null;
   const v3 = /_v3/.test(MODEL);
   const body = {
-    text,
+    text: v3 && ACCENT ? `[${ACCENT} accent] ${text}` : text,
     model_id: MODEL,
+    language_code: "en",
     voice_settings: v3
       ? { stability: 0.5, similarity_boost: 0.8 }
       // Soothing: steadier than default so it never swings in pitch, almost no style exaggeration
@@ -32,6 +36,7 @@ export async function speak(text, { previous = "" } = {}) {
   try {
     const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE}?output_format=${FORMAT}`, {
       method: "POST",
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { "xi-api-key": KEY, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });

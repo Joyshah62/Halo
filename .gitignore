@@ -13,3 +13,6 @@ ipad/DerivedData/
 ipad/Halo/Signing.local.xcconfig
 
 voice-samples/
+
+server/logs/
+server/lessons.sqlite*

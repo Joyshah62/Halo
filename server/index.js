@@ -1,6 +1,9 @@
 import "dotenv/config";
+import { installProcessLogging, requestLogging, log, errorDetails } from "./logging.js";
 import express from "express";
 import cors from "cors";
+import { eventStream } from "./sse.js";
+import { convertOffice, ImportError } from "./documents.js";
 import { buildUserText, buildSystemPrompt, normalizeConversation, DIGEST_SYSTEM, buildDigestText, RECAP_SYSTEM, buildRecapText, ENHANCE_SYSTEM, buildEnhanceText, REFINE_SYSTEM, buildRefineText } from "./prompt.js";
 import { streamText, generateImage, generateJSON, PROVIDER, MODEL } from "./llm.js";
 import { speak, ttsEnabled, ttsVoice } from "./tts.js";
@@ -13,11 +16,28 @@ import { cleanStep, despeak, prepareStep } from "./steps.js";
 import { startLesson, continueLesson } from "./lesson.js";
 
 const PORT = Number(process.env.PORT || 8787);
+installProcessLogging();
 const app = express();
 app.use(cors());
+app.use(requestLogging);
 app.use(express.json({ limit: "25mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, provider: PROVIDER, model: MODEL, tts: ttsEnabled, voice: ttsEnabled ? ttsVoice : null }));
+// Raw bytes avoid base64 overhead. Files and conversion profiles are removed after each request.
+app.post("/api/documents/convert", express.raw({ type: "application/octet-stream", limit: "25mb" }), async (req, res) => {
+  try {
+    const pdf = await convertOffice(req.body, req.query.extension);
+    res.set({ "Content-Type": "application/pdf", "Cache-Control": "no-store" }).send(pdf);
+  } catch (error) {
+    res.status(error instanceof ImportError ? error.status : 500).json({ error: error instanceof ImportError ? error.message : "The document could not be imported. Please try again." });
+  }
+});
+
+app.use("/api/documents/convert", (error, _req, res, next) => {
+  if (error.type === "entity.too.large") return res.status(413).json({ error: "Choose a document smaller than 25 MB." });
+  next(error);
+});
+
 app.get("/api/history", (_req, res) => res.json(db.history()));
 app.get("/api/confusion", (_req, res) => res.json(db.confusionMap()));
 app.get("/api/flashcards", (_req, res) => res.json(db.flashcards()));
@@ -30,22 +50,27 @@ app.delete("/api/history", (_req, res) => { db.clearAll(); res.json({ ok: true }
 //         pageTitle, pageUrl, tutorMode, previousAnswer, parentId }
 app.post("/api/ask", async (req, res) => {
   const b = req.body ?? {};
+  const started = Date.now();
+  const trace = (stage, details = {}) => {
+    res.locals.stage = stage;
+    log(stage, { request: res.locals.requestID, question: res.locals.questionID, ms: Date.now() - started, ...details });
+  };
   if (typeof b.question !== "string" || !b.question.trim()) return res.status(400).json({ error: "question required" });
 
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no",
-  });
-  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  const stream = eventStream(res, { onHeartbeat: () => log("ask.waiting", {
+    request: res.locals.requestID, question: res.locals.questionID, stage: res.locals.stage, ms: Date.now() - started,
+  }) });
+  const send = (event, data) => stream.send(event, data);
 
   const qid = db.logQuestion({
     url: b.pageUrl, title: b.pageTitle, question: b.question,
     mode: b.tutorMode ? "hint" : "answer", parentId: b.parentId,
   });
+  res.locals.questionID = qid;
+  trace("ask.started", { provider: PROVIDER, model: MODEL, image: Boolean(b.image), contextImage: Boolean(b.contextImage) });
   send("start", { id: qid });
 
+  try {
   const images = [];
   if (b.contextImage) images.push({ mime: "image/jpeg", data: b.contextImage, label: "Screenshot of the whole visible page (for context):" });
   if (b.image) images.push({ mime: b.imageMime || "image/png", data: b.image, label: "Close-up of the rectangular section the student selected:" });
@@ -70,20 +95,20 @@ app.post("/api/ask", async (req, res) => {
   const ttsJobs = [];       // promises in step order
   let emitted = 0;
   let buffer = "";
-  let closed = false;
-  res.on("close", () => { closed = true; });
-
   // Emit steps strictly in order, each once its audio is ready.
   async function flush() {
     while (emitted < ttsJobs.length) {
       const audio = await ttsJobs[emitted];
-      if (closed) return;
+      if (stream.closed) return;
       send("step", { index: emitted, ...steps[emitted], audio });
       emitted++;
+      trace("ask.step.sent", { index: emitted - 1, audio: Boolean(audio) });
     }
   }
-  let flushing = Promise.resolve();
-  const queueFlush = () => (flushing = flushing.then(flush));
+  let flushing = Promise.resolve(), preparationError;
+  const queueFlush = () => {
+    flushing = flushing.then(flush).catch((error) => { preparationError = error; });
+  };
 
   function handleLine(line) {
     line = line.trim().replace(/^```[a-z]*$|^```$/i, "");
@@ -103,7 +128,10 @@ app.post("/api/ask", async (req, res) => {
     const step = cleanStep(obj);
     if (!step) return;
     steps.push(step);
-    ttsJobs.push(prepareStep(step, steps.slice(0, -1).map((x) => x.say).join(" ")));
+    trace("ask.media.started", { index: steps.length - 1 });
+    ttsJobs.push(prepareStep(step, steps.slice(0, -1).map((x) => x.say).join(" ")).catch((error) => {
+      log("ask.media.error", { request: res.locals.requestID, ...errorDetails(error) }, "warn"); return null;
+    }));
     queueFlush();
   }
 
@@ -130,10 +158,11 @@ app.post("/api/ask", async (req, res) => {
     send("done", { id: qid, steps: steps.length, ms: Date.now() - t0 });
     return res.end();
   }
-  try {
+    trace("ask.provider.started");
     let fullText = "";
     for await (const delta of streamText({ images, text: userText, system, conversation: normalizeConversation(b.conversation) })) {
-      if (closed) break;
+      if (stream.closed) break;
+      if (!fullText) trace("ask.provider.first_delta");
       fullText += delta;
       buffer += delta;
       let nl;
@@ -142,8 +171,11 @@ app.post("/api/ask", async (req, res) => {
         buffer = buffer.slice(nl + 1);
       }
     }
+    trace("ask.provider.finished", { characters: fullText.length, steps: steps.length });
     if (buffer.trim()) handleLine(buffer);
     await flushing;
+    if (preparationError) throw preparationError;
+    if (stream.closed) return;
     if (!meta) { meta = { mode: b.tutorMode ? "hint" : "answer", topic: "" }; send("meta", meta); }
     if (steps.length === 0) {
       // Fallback: plain text next to the circle
@@ -158,10 +190,12 @@ app.post("/api/ask", async (req, res) => {
       answerText: steps.map((s) => s.say).join(" "),
     });
     send("done", { id: qid, steps: steps.length, ms: Date.now() - t0 });
+    trace("ask.completed", { steps: steps.length });
     console.log(`[ask] #${qid} ${meta.mode} "${meta.topic}" ${steps.length} steps in ${Date.now() - t0}ms — ${b.question}`);
   } catch (e) {
+    log("ask.error", { request: res.locals.requestID, question: res.locals.questionID, stage: res.locals.stage, ...errorDetails(e) }, "error");
     console.error("[ask] error", e);
-    if (!closed) send("error", { message: e.message || String(e) });
+    if (!stream.closed) send("error", { message: e.message || String(e) });
   } finally {
     res.end();
   }
@@ -177,10 +211,8 @@ app.post("/api/check", async (req, res) => {
   const b = req.body ?? {};
   if (typeof b.image !== "string" || !b.image) return res.status(400).json({ error: "image required" });
 
-  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-  let closed = false;
-  res.on("close", () => { closed = true; });
-  const send = (event, data) => { if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+  const stream = eventStream(res);
+  const send = (event, data) => stream.send(event, data);
   const t0 = Date.now();
   send("start", {});
   try {
@@ -238,10 +270,8 @@ app.post("/api/stuck", async (req, res) => {
   const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 24).map((l) => ({ n: Number(l?.n) || 0, source: l?.source === "printed" ? "printed" : "handwritten", text: String(l?.text || "").slice(0, 160) }));
   if (!lines.length && !(typeof b.problem === "string" && b.problem.trim())) return res.status(400).json({ error: "problem or lines required" });
 
-  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-  let closed = false;
-  res.on("close", () => { closed = true; });
-  const send = (event, data) => { if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+  const stream = eventStream(res);
+  const send = (event, data) => stream.send(event, data);
   const t0 = Date.now();
   send("start", {});
   try {
@@ -481,15 +511,14 @@ app.post("/api/speak", webRoute("speak", async (b) => ({ audio: typeof b.text ==
 //   done { id, waiting }      waiting = true while the lesson is paused on a question
 const lessonRoute = (run) => async (req, res) => {
   const b = req.body ?? {};
-  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-  let closed = false;
-  res.on("close", () => { closed = true; });
-  const send = (event, data) => { if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+  const stream = eventStream(res);
+  const send = (event, data) => stream.send(event, data);
   const t0 = Date.now();
   try {
     const out = await run(b, send, () => closed);
     send("done", { ...out, ms: Date.now() - t0 });
   } catch (e) {
+    log("lesson.error", { request: res.locals.requestID, ...errorDetails(e) }, "error");
     console.error("[lesson] error", e);
     send("error", { message: e.message || String(e) });
   } finally { res.end(); }
@@ -520,7 +549,17 @@ function mockEnhanced(text, title) {
   };
 }
 
-app.listen(PORT, () => {
+app.use((error, req, res, _next) => {
+  log("request.error", { request: res.locals.requestID, path: req.path, ...errorDetails(error) }, "error");
+  if (res.headersSent) {
+    if (!res.writableEnded && !res.destroyed) res.end(`event: error\ndata: ${JSON.stringify({ message: "The server couldn’t finish this answer. Please retry." })}\n\n`);
+    return;
+  }
+  res.status(error.status || 500).json({ error: "The request could not be completed. Check the server log for its request ID." });
+});
+
+const httpServer = app.listen(PORT, () => {
+  log("server.listening", { port: PORT, provider: PROVIDER, model: MODEL });
   // Library voices can take several seconds on first use; warm it so the first real answer isn't the slow one.
   if (ttsEnabled) { const t = Date.now(); speak("Hi.").then((a) => console.log(`[tts] voice warmed in ${Date.now() - t}ms${a ? "" : " (failed)"}`)); }
   console.log(`Halo server on http://localhost:${PORT}  ${PROVIDER}/${MODEL}  tts=${ttsEnabled ? "elevenlabs" : "off (browser fallback)"}`);
