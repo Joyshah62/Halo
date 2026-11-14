@@ -41,6 +41,13 @@ enum HaloKit {
     }
 }
 
+extension Text {
+    /// Halo's handwriting. Caveat's "?", "!" and a few capitals lean a sixth of their size past their own width, and
+    /// SwiftUI draws nothing outside a text's measured width: the last character of a line lost its right side.
+    /// A no-break space after the text makes the measured width cover the lean.
+    func hand(_ size: CGFloat) -> Text { Text("\(self)\u{00A0}").font(HaloKit.hand(size)) }
+}
+
 /// Paper with a faint dot grid, like a desk pad.
 struct DeskPaper: View {
     var body: some View {
@@ -120,7 +127,7 @@ struct PageHeader<Trailing: View>: View {
                 Eyebrow(eyebrow, color: HaloStyle.coral)
                 Text(title).font(HaloKit.title(38, .regular)).foregroundStyle(HaloStyle.text)
                     .fixedSize(horizontal: false, vertical: true)
-                if let note, !note.isEmpty { Text(note).font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true) }
+                if let note, !note.isEmpty { Text(note).hand(24).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true) }
             }
             Spacer(minLength: 12)
             trailing
@@ -155,7 +162,7 @@ struct ScribbleChip: View {
         HStack(spacing: 7) {
             if done { Image(systemName: "checkmark.circle.fill").foregroundStyle(HaloKit.leaf).font(.system(size: 14, weight: .semibold)) }
             else if let icon { Image(systemName: icon).foregroundStyle(tint).font(.system(size: 13, weight: .semibold)) }
-            Text(text).font(HaloKit.hand(21)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+            Text(text).hand(21).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .background(Color.white.opacity(0.85), in: Capsule())
@@ -275,7 +282,7 @@ struct EmptyDesk: View {
         VStack(spacing: 12) {
             HaloRing(size: 54, symbol: symbol)
             Text(title).font(HaloKit.title(24)).foregroundStyle(HaloStyle.text).multilineTextAlignment(.center)
-            Text(note).font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).frame(maxWidth: 420)
+            Text(note).hand(23).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).frame(maxWidth: 420)
         }
         .padding(.vertical, 34).padding(.horizontal, 20).frame(maxWidth: .infinity)
     }

@@ -391,13 +391,13 @@ struct AvatarSheet: View {
                     ForEach(moods, id: \.0) { name, mood in
                         VStack(spacing: 4) {
                             TutorAvatar(cue: TutorCue(base: mood), size: 190)
-                            Text(name).font(HaloKit.hand(27)).foregroundStyle(HaloStyle.ink)
+                            Text(name).hand(27).foregroundStyle(HaloStyle.ink)
                         }.haloCard(padding: 16)
                     }
                 }
                 HStack(spacing: 30) {
                     ForEach([104, 78, 56] as [CGFloat], id: \.self) { size in TutorAvatar(cue: TutorCue(base: .idle), size: size) }
-                    Text("how it looks small").font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink)
+                    Text("how it looks small").hand(24).foregroundStyle(HaloStyle.ink)
                 }
             }
             .padding(32).frame(maxWidth: 1000).frame(maxWidth: .infinity)

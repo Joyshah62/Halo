@@ -100,7 +100,7 @@ struct DiveBoard: View {
                             HStack(spacing: 7) {
                                 Circle().fill(here ? HaloStyle.coral : Color.white).frame(width: 13, height: 13)
                                     .overlay(Circle().stroke(HaloStyle.coral.opacity(ahead ? 0.45 : 1), lineWidth: 2.5))
-                                Text(item.plan?.title ?? item.question).font(HaloKit.hand(here ? 24 : 22))
+                                Text(item.plan?.title ?? item.question).hand(here ? 24 : 22)
                                     .foregroundStyle(here ? HaloStyle.text : HaloStyle.ink.opacity(ahead ? 0.55 : 1)).lineLimit(1).frame(maxWidth: here ? 460 : 220, alignment: .leading).fixedSize()
                             }.contentShape(Rectangle())
                         }
@@ -135,7 +135,7 @@ struct DiveBoard: View {
                 Text(dive.plan?.title ?? dive.question).font(HaloKit.title(38, .regular)).foregroundStyle(HaloStyle.text)
                     .lineLimit(2).minimumScaleFactor(0.7).fixedSize(horizontal: false, vertical: true)
                 if dive.plan != nil {
-                    Text("“\(dive.question)”").font(.custom("Caveat-Regular", size: 24)).foregroundStyle(HaloStyle.ink).lineLimit(2)
+                    Text("“\(dive.question)”").hand(24).foregroundStyle(HaloStyle.ink).lineLimit(2)
                 }
                 if let caption = dive.caption {
                     HStack(alignment: .top, spacing: 8) {
@@ -197,7 +197,7 @@ struct DiveBoard: View {
                         if step.done { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color(red: 0.13, green: 0.55, blue: 0.35)).transition(.scale.combined(with: .opacity)) }
                         else { Image(systemName: step.icon).foregroundStyle(HaloStyle.coral).symbolEffect(.pulse, isActive: true) }
                     }.font(HaloKit.text(14, .semibold)).frame(width: 18)
-                    Text(step.text).font(.custom("Caveat-Regular", size: 21)).foregroundStyle(HaloStyle.text.opacity(step.done ? 0.75 : 1)).lineLimit(1)
+                    Text(step.text).hand(21).foregroundStyle(HaloStyle.text.opacity(step.done ? 0.75 : 1)).lineLimit(1)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 5)
                 .background(Color.white.opacity(step.done ? 0.6 : 0.95), in: Capsule())
@@ -245,7 +245,7 @@ struct DiveBoard: View {
                                 Button { go("Go deeper: \(section.heading)", about: "\(section.heading). \(section.text)") } label: {
                                     HStack(spacing: 4) {
                                         Image(systemName: "arrow.turn.down.right").font(.system(size: 10.5, weight: .bold))
-                                        Text("dig into this").font(HaloKit.hand(21))
+                                        Text("dig into this").hand(21)
                                     }
                                     .foregroundStyle(HaloStyle.coral).padding(.horizontal, 8).frame(height: 24).contentShape(Rectangle())
                                 }.buttonStyle(.plain).accessibilityLabel("Dig into \(section.heading)")
@@ -256,7 +256,7 @@ struct DiveBoard: View {
                 if !answer.takeaway.isEmpty {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("KEEP THIS").font(HaloKit.text(10.5, .bold)).tracking(1.2).foregroundStyle(HaloStyle.text.opacity(0.5))
-                        Text(answer.takeaway).font(.custom("Caveat-Regular", size: 28)).foregroundStyle(HaloStyle.text).lineSpacing(1).fixedSize(horizontal: false, vertical: true)
+                        Text(answer.takeaway).hand(28).foregroundStyle(HaloStyle.text).lineSpacing(1).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Self.highlight, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
@@ -269,7 +269,7 @@ struct DiveBoard: View {
             .transition(.opacity.combined(with: .offset(y: 24)))
         } else if dive.error == nil {
             VStack(alignment: .leading, spacing: 14) {
-                Text(dive.plan == nil ? "Thinking about your question…" : "Reading what the web says…").font(.custom("Caveat-Regular", size: 26)).foregroundStyle(HaloStyle.ink)
+                Text(dive.plan == nil ? "Thinking about your question…" : "Reading what the web says…").hand(26).foregroundStyle(HaloStyle.ink)
                 ForEach(0..<7, id: \.self) { row in
                     RoundedRectangle(cornerRadius: 5).fill(HaloStyle.ink.opacity(0.07)).frame(height: 13).frame(maxWidth: row % 3 == 2 ? 300 : .infinity, alignment: .leading)
                 }
@@ -376,7 +376,7 @@ struct DiveBoard: View {
                     RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white)
                     VStack(spacing: 8) {
                         Image(systemName: "play.rectangle").font(.system(size: 30)).foregroundStyle(HaloStyle.coral.opacity(0.7))
-                        Text("Finding a video worth your time…").font(.custom("Caveat-Regular", size: 23)).foregroundStyle(HaloStyle.ink)
+                        Text("Finding a video worth your time…").hand(23).foregroundStyle(HaloStyle.ink)
                     }
                 }.aspectRatio(16 / 9, contentMode: .fit).modifier(Breathing())
             }
@@ -394,7 +394,7 @@ struct DiveBoard: View {
                     .foregroundStyle(.white).frame(width: 62, height: 50).background(HaloStyle.coral, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     VStack(alignment: .leading, spacing: 1) {
                         Text("HALO WATCHED THIS FOR YOU").font(HaloKit.text(10, .bold)).tracking(1.1).foregroundStyle(HaloStyle.coral)
-                        Text("Skip to \(moment.clock): it \(moment.why.prefix(1).lowercased() + moment.why.dropFirst())").font(.custom("Caveat-Regular", size: 22)).foregroundStyle(HaloStyle.text)
+                        Text("Skip to \(moment.clock): it \(moment.why.prefix(1).lowercased() + moment.why.dropFirst())").hand(22).foregroundStyle(HaloStyle.text)
                             .lineLimit(3).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
@@ -404,7 +404,7 @@ struct DiveBoard: View {
         } else if dive.watching.contains(video.id) {
             HStack(spacing: 10) {
                 Image(systemName: "eye").font(.system(size: 16, weight: .semibold)).foregroundStyle(HaloStyle.coral).symbolEffect(.pulse, isActive: true)
-                Text("Halo is watching this for you, to find the part you need…").font(.custom("Caveat-Regular", size: 21)).foregroundStyle(HaloStyle.ink)
+                Text("Halo is watching this for you, to find the part you need…").hand(21).foregroundStyle(HaloStyle.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
@@ -442,7 +442,7 @@ struct DiveBoard: View {
                 Rectangle().fill(HaloStyle.ink.opacity(0.06)).overlay { if failed { Image(systemName: "photo").foregroundStyle(.secondary) } else { ProgressView() } }
             }
             .frame(maxWidth: .infinity).frame(height: 150).background(Color(white: 0.97))
-            Text(image.title).font(.custom("Caveat-Regular", size: 19)).foregroundStyle(HaloStyle.text).lineLimit(2).multilineTextAlignment(.leading)
+            Text(image.title).hand(19).foregroundStyle(HaloStyle.text).lineLimit(2).multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, minHeight: 40, alignment: .topLeading)
         }
         .padding(.horizontal, 9).padding(.top, 9).padding(.bottom, 8)
@@ -461,7 +461,7 @@ struct DiveBoard: View {
             VStack(spacing: 14) {
                 RemoteImage(url: URL(string: image.thumb), fill: false) { _ in ProgressView().tint(.white).frame(width: 200, height: 200) }
                     .background(Color.white).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous)).frame(maxWidth: 900, maxHeight: 620)
-                Text(image.title).font(.custom("Caveat-Regular", size: 28)).foregroundStyle(.white).multilineTextAlignment(.center)
+                Text(image.title).hand(28).foregroundStyle(.white).multilineTextAlignment(.center)
                 HStack(spacing: 14) {
                     Text([image.credit, image.license, "Wikimedia Commons"].filter { !$0.isEmpty }.joined(separator: " · ")).font(HaloKit.text(13)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                     if !image.page.isEmpty { Button("See the original") { zoomed = nil; open(image.page) }.font(HaloKit.text(13, .semibold)).foregroundStyle(.white) }
@@ -497,7 +497,7 @@ struct DiveBoard: View {
                         Button { go(idea) } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.turn.down.right").font(.system(size: 11, weight: .bold)).foregroundStyle(HaloStyle.coral)
-                                Text(idea).font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink).lineLimit(2).multilineTextAlignment(.leading)
+                                Text(idea).hand(21).foregroundStyle(HaloStyle.ink).lineLimit(2).multilineTextAlignment(.leading)
                             }
                             .padding(.horizontal, 12).padding(.vertical, 5)
                             .background(Color.white, in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12)))

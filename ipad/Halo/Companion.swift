@@ -59,7 +59,7 @@ struct HaloDock: View {
         } else if focused, typed.isEmpty {
             ideas.transition(.move(edge: atTop ? .top : .bottom).combined(with: .opacity))
         } else if let says = store.haloSays {
-            Text(says).font(HaloKit.hand(25)).foregroundStyle(HaloStyle.text).lineLimit(2)
+            Text(says).hand(25).foregroundStyle(HaloStyle.text).lineLimit(2)
                 .padding(.horizontal, 16).padding(.vertical, 8)
                 .background(BubbleShape(tail: atTop ? .top : .leading).fill(Color.white).shadow(color: HaloStyle.ink.opacity(0.16), radius: 10, y: 4))
                 .padding(.leading, atTop ? 6 : 92).padding(.top, atTop ? 8 : 0)
@@ -125,8 +125,9 @@ struct HaloDock: View {
         .onTapGesture { focused = false; store.pokeHalo() }
         .gesture(DragGesture(minimumDistance: 10, coordinateSpace: .global)
             .updating($drag) { value, state, _ in state = value.translation }
+            // Dragging Halo while its bar is open puts the bar away and moves it.
+            .onChanged { _ in if store.showDock { store.tuckDock() } }
             .onEnded { value in
-                guard !store.showDock else { return }
                 let end = parked(after: value.translation)
                 parkedX = end.width; parkedY = end.height
             })
@@ -183,7 +184,7 @@ struct HaloDock: View {
                         // "Find " and "Go to page " are the start of a sentence the student finishes.
                         if idea.hasSuffix(" ") { text = idea } else { text = ""; focused = false; store.askHalo(idea) }
                     } label: {
-                        Text(idea.hasSuffix(" ") ? idea + "…" : idea).font(HaloKit.hand(22)).lineLimit(1)
+                        Text(idea.hasSuffix(" ") ? idea + "…" : idea).hand(22).lineLimit(1)
                             .padding(.horizontal, 14).padding(.vertical, 6)
                             .background(Color.white, in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12)))
                             .foregroundStyle(HaloStyle.ink).shadow(color: .black.opacity(0.08), radius: 6, y: 3)
@@ -219,9 +220,9 @@ struct HaloLauncher: View {
         let asked = store.notes.sessions.filter { !$0.messages.isEmpty }.count
         return [
             Tile(id: 0, icon: "bubble.left.and.text.bubble.right", title: "Ask about this page", note: "out loud, no circle needed", tint: HaloStyle.coral) { store.askAboutPage(store.pageIndex) },
-            Tile(id: 1, icon: "graduationcap", title: "Teach me this chapter", note: store.currentChapter.map { String($0.title.prefix(28)) } ?? "one idea at a time", tint: HaloStyle.ink) { store.openLesson() },
+            Tile(id: 1, icon: "graduationcap", title: "Teach me this chapter", note: store.currentChapter?.title ?? "one idea at a time", tint: HaloStyle.ink) { store.openLesson() },
             Tile(id: 2, icon: "text.magnifyingglass", title: "Find anything", note: "chapters · notes · search", tint: HaloKit.leaf) { store.openNavigator(store.navigatorTab) },
-            Tile(id: 3, icon: "square.and.pencil", title: "My notes", note: "write them, Halo improves them", tint: HaloKit.amber) { store.openNotebook() },
+            Tile(id: 3, icon: "square.and.pencil", title: "My notes", note: "Halo improves them", tint: HaloKit.amber) { store.openNotebook() },
             Tile(id: 4, icon: "list.clipboard", title: "Session summary", note: asked == 0 ? "everything you asked" : "\(asked) question\(asked == 1 ? "" : "s") so far", tint: HaloStyle.ink) { store.openRecap() },
             Tile(id: 5, icon: "sparkles", title: store.isBook ? "Halo’s read of this chapter" : "Halo’s read of this", note: "the ideas to keep", tint: HaloStyle.coral) { store.showBrief() },
         ]
@@ -247,19 +248,20 @@ struct HaloLauncher: View {
                                 // Tiles are about 250pt wide on a 10.5-inch iPad: wrap rather than cut words off.
                                 Text(tile.title).font(HaloKit.text(15.5, .semibold)).foregroundStyle(HaloStyle.text)
                                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                                Text(tile.note).font(HaloKit.hand(20)).foregroundStyle(HaloStyle.ink)
-                                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                                // One line, cut with an ellipsis: a long chapter name used to wrap and stop mid-word.
+                                Text(tile.note).hand(20).foregroundStyle(HaloStyle.ink).lineLimit(1)
                             }
                             Spacer(minLength: 0)
                         }
-                        .padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                        // Every tile the same height (room for a two-line title), so icons and words line up across a row.
+                        .padding(.horizontal, 10).frame(maxWidth: .infinity, alignment: .leading).frame(height: 78)
                         .background(HaloStyle.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .contentShape(Rectangle())
                     }.buttonStyle(.plain).arrives(tile.id)
                 }
             }
             Text("or just tell me: “go to page 12” · “find entropy” · “quiz me”")
-                .font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink.opacity(0.85)).lineLimit(1).minimumScaleFactor(0.7)
+                .hand(22).foregroundStyle(HaloStyle.ink.opacity(0.85)).lineLimit(1).minimumScaleFactor(0.7)
         }
         .padding(18).frame(maxWidth: 560)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))

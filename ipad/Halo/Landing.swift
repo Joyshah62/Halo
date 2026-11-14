@@ -74,7 +74,7 @@ struct LandingView: View {
                                           sleepAt: greetedAt.addingTimeInterval(90)), size: 190)
             }.buttonStyle(.plain).accessibilityLabel("Halo")
             Text(greeting).font(HaloKit.title(50)).foregroundStyle(HaloStyle.text).multilineTextAlignment(.center)
-            Text("What are we learning today?").font(HaloKit.hand(34)).foregroundStyle(HaloStyle.ink).rotationEffect(.degrees(-1))
+            Text("What are we learning today?").hand(34).foregroundStyle(HaloStyle.ink).rotationEffect(.degrees(-1))
             if let error = store.error { Text(error).font(HaloKit.text(13)).foregroundStyle(.red).multilineTextAlignment(.center).padding(.top, 6) }
         }
     }
@@ -87,7 +87,7 @@ struct LandingView: View {
             FlowRow(spacing: 8) {
                 ForEach(Self.ideas, id: \.self) { idea in
                     Button { store.askHalo(idea) } label: {
-                        Text(idea).font(HaloKit.hand(22)).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 14).padding(.vertical, 5)
+                        Text(idea).hand(22).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 14).padding(.vertical, 5)
                             .background(Color.white.opacity(0.85), in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12))).foregroundStyle(HaloStyle.ink)
                     }.buttonStyle(.plain)
                 }
@@ -121,7 +121,7 @@ struct LandingView: View {
                     // Three cards share a row on a 10.5-inch iPad (about 240pt each): wrap rather than cut words off.
                     Text(title).font(HaloKit.text(16.5, .semibold)).foregroundStyle(filled ? .white : HaloStyle.text)
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                    Text(note).font(HaloKit.hand(21)).foregroundStyle(filled ? Color.white.opacity(0.92) : HaloStyle.ink)
+                    Text(note).hand(21).foregroundStyle(filled ? Color.white.opacity(0.92) : HaloStyle.ink)
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
@@ -138,7 +138,7 @@ struct LandingView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Eyebrow("Your shelf")
-                Text("tap one to pick up where you left off").font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink.opacity(0.8))
+                Text("tap one to pick up where you left off").hand(21).foregroundStyle(HaloStyle.ink.opacity(0.8))
             }.padding(.leading, 4)
             // As many across as fit whole (four on a 10.5-inch iPad), then onto the next row: no card is cut off by the edge.
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 166), spacing: 18, alignment: .top)], alignment: .leading, spacing: 28) {
@@ -165,7 +165,7 @@ struct LandingView: View {
                 Text(item.displayName).font(HaloKit.title(15.5, .semibold)).foregroundStyle(HaloStyle.text).lineLimit(5).minimumScaleFactor(0.85).multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
                 Text("\(item.pageCount) pages").font(HaloKit.text(12)).foregroundStyle(.secondary)
-                Text(latest ? "continue →" : item.lastOpenedAt.formatted(.relative(presentation: .named))).font(HaloKit.hand(21)).foregroundStyle(latest ? HaloStyle.coral : HaloStyle.ink).lineLimit(1)
+                Text(latest ? "continue →" : item.lastOpenedAt.formatted(.relative(presentation: .named))).hand(21).foregroundStyle(latest ? HaloStyle.coral : HaloStyle.ink).lineLimit(1)
             }
             .padding(10).frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -198,7 +198,7 @@ struct LandingView: View {
             Text(feature.title).font(HaloKit.title(19, .semibold)).foregroundStyle(HaloStyle.text)
             Text(feature.detail).font(HaloKit.text(14.5)).foregroundStyle(.secondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
-            Text(feature.scribble).font(.custom("Caveat-Regular", size: 23)).foregroundStyle(HaloStyle.ink).rotationEffect(.degrees(-1.5))
+            Text(feature.scribble).hand(23).foregroundStyle(HaloStyle.ink).rotationEffect(.degrees(-1.5))
         }
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 236, alignment: .topLeading)

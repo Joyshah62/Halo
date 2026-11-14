@@ -1323,7 +1323,8 @@ final class StudyStore: ObservableObject {
     func askHalo(_ text: String) {
         let asked = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !asked.isEmpty else { return }
-        showLauncher = false
+        // Asked: the bar has done its job. It used to stay open over the page after "go to page 12" or a search.
+        if showDock || showLauncher { tuckDock() }
         func matches(_ pattern: String) -> [String]? {
             guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
                   let found = regex.firstMatch(in: asked, range: NSRange(asked.startIndex..., in: asked)) else { return nil }

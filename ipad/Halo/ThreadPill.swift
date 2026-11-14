@@ -111,11 +111,11 @@ struct HaloMargin: View {
         VStack(spacing: 14) {
             Spacer(minLength: 0)
             if case .listening(let heard) = store.pill {
-                Text(heard.isEmpty ? "ask your question out loud" : "“\(heard)”").font(HaloKit.hand(32)).foregroundStyle(HaloStyle.ink)
+                Text(heard.isEmpty ? "ask your question out loud" : "“\(heard)”").hand(32).foregroundStyle(HaloStyle.ink)
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).animation(.easeOut(duration: 0.15), value: heard)
                 Text("I’ll answer when you pause").font(HaloKit.text(13.5)).foregroundStyle(noteSecondary)
             } else {
-                Text("what do you want to know about this?").font(HaloKit.hand(30)).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center)
+                Text("what do you want to know about this?").hand(30).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center)
                 FlowRow(spacing: 8) {
                     ForEach(Self.starters, id: \.self) { starter in
                         Button { store.setDraft(starter); store.ask() } label: {
@@ -470,7 +470,7 @@ struct TranscriptView: View {
                         Text(message.role == "user" ? "You" : "Halo").font(HaloKit.text(12, .semibold)).foregroundStyle(message.role == "user" ? HaloStyle.coral : HaloStyle.ink)
                         Text(message.text).font(HaloKit.text(15)).textSelection(.enabled)
                         let written = message.ink.compactMap { $0.type == "text" ? $0.value : nil }
-                        if !written.isEmpty { Text(written.joined(separator: "   ")).font(.custom("Caveat-Regular", size: 22)).foregroundStyle(HaloStyle.ink) }
+                        if !written.isEmpty { Text(written.joined(separator: "   ")).hand(22).foregroundStyle(HaloStyle.ink) }
                     }
                 }
             }.padding(16)

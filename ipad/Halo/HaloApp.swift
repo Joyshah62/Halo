@@ -94,7 +94,7 @@ struct LibraryView: View {
         .diveBoard(store, when: !store.showNotebook)
         .overlay {
             if store.loading {
-                VStack(spacing: 12) { HaloRing(size: 46, working: true); Text(store.openingMessage).font(HaloKit.hand(25)).foregroundStyle(HaloStyle.text) }
+                VStack(spacing: 12) { HaloRing(size: 46, working: true); Text(store.openingMessage).hand(25).foregroundStyle(HaloStyle.text) }
                     .padding(.horizontal, 30).padding(.vertical, 24).background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
             }

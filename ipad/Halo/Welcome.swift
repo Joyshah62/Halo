@@ -36,7 +36,7 @@ struct WelcomeCard: View {
                             ForEach(Array(map.keyIdeas.enumerated()), id: \.offset) { index, idea in
                                 HStack(alignment: .firstTextBaseline, spacing: 9) {
                                     Text("\(index + 1)").font(HaloKit.hand(30)).foregroundStyle(HaloStyle.coral).frame(width: 16, alignment: .leading)
-                                    Text(idea).font(HaloKit.hand(27)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+                                    Text(idea).hand(27).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
                                 }
                                 .opacity(index < revealed ? 1 : 0).offset(x: index < revealed ? 0 : -8)
                                 .animation(.easeOut(duration: 0.45).delay(0.1), value: revealed)
@@ -51,7 +51,7 @@ struct WelcomeCard: View {
                         Button { store.startFromWelcome(page: max(0, (map.pages.first?.page ?? 1) - 1)) } label: { Text("From the top").frame(maxWidth: .infinity) }
                             .buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: false))
                     }
-                    Text("circle anything with your Pencil and ask").font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink.opacity(0.8)).frame(maxWidth: .infinity)
+                    Text("circle anything with your Pencil and ask").hand(21).foregroundStyle(HaloStyle.ink.opacity(0.8)).frame(maxWidth: .infinity)
                 }
                 .padding(26)
             }
@@ -85,7 +85,7 @@ struct WelcomeCard: View {
                 }
             }
             if let hard = map.pages.first(where: { $0.difficulty >= 3 && !$0.note.isEmpty }) {
-                Text("p.\(hard.page): \(hard.note)").font(HaloKit.hand(21)).foregroundStyle(HaloStyle.coral).fixedSize(horizontal: false, vertical: true)
+                Text("p.\(hard.page): \(hard.note)").hand(21).foregroundStyle(HaloStyle.coral).fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
@@ -100,7 +100,7 @@ struct ReadingBanner: View {
     var body: some View {
         HStack(spacing: 11) {
             HaloRing(size: 22, working: true)
-            Text(progress).font(HaloKit.hand(23)).foregroundStyle(HaloStyle.text)
+            Text(progress).hand(23).foregroundStyle(HaloStyle.text)
         }
         .padding(.leading, 12).padding(.trailing, 18).padding(.vertical, 8)
         .background(Color.white, in: Capsule())
@@ -148,7 +148,7 @@ struct OnboardingView: View {
                     Eyebrow("How you like things explained")
                     ChoiceChips(options: styles, selection: $profile.style)
                     Sticky(label: profile.style.isEmpty ? nil : "So I’d say it like this", tilt: -0.5) {
-                        Text(sample).font(HaloKit.hand(25)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+                        Text(sample).hand(25).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
                             .contentTransition(.opacity).animation(.easeOut(duration: 0.25), value: profile.style)
                     }.padding(.top, 2)
                 }.haloCard().arrives(3)

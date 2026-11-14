@@ -51,9 +51,9 @@ struct SettingsView: View {
     @ViewBuilder private var status: some View {
         switch link {
         case .unknown: EmptyView()
-        case .testing: HStack(spacing: 7) { HaloRing(size: 16, working: true); Text("checking…").font(HaloKit.hand(20)).foregroundStyle(.secondary) }
-        case .connected: HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(HaloKit.leaf); Text("connected").font(HaloKit.hand(21)).foregroundStyle(HaloKit.leaf) }
-        case .failed: HStack(spacing: 6) { Image(systemName: "wifi.exclamationmark").foregroundStyle(.red); Text("can’t reach it").font(HaloKit.hand(21)).foregroundStyle(.red) }
+        case .testing: HStack(spacing: 7) { HaloRing(size: 16, working: true); Text("checking…").hand(20).foregroundStyle(.secondary) }
+        case .connected: HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(HaloKit.leaf); Text("connected").hand(21).foregroundStyle(HaloKit.leaf) }
+        case .failed: HStack(spacing: 6) { Image(systemName: "wifi.exclamationmark").foregroundStyle(.red); Text("can’t reach it").hand(21).foregroundStyle(.red) }
         }
     }
     private func test() async {
@@ -110,9 +110,9 @@ struct SettingsView: View {
     private var tips: some View {
         Sticky(label: "On your iPad", tilt: -0.4) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("circle with the Pencil, ask out loud").font(HaloKit.hand(25))
-                Text("fingers scroll and zoom").font(HaloKit.hand(25))
-                Text("tap a circle to pick that conversation back up").font(HaloKit.hand(25))
+                Text("circle with the Pencil, ask out loud").hand(25)
+                Text("fingers scroll and zoom").hand(25)
+                Text("tap a circle to pick that conversation back up").hand(25)
                 Text("Without a Pencil, tap Halo and turn on finger circling (the hand) in its bar. Original PDFs are never changed; Halo’s copies, your handwriting and every conversation stay in its local library.")
                     .font(HaloKit.text(13)).foregroundStyle(HaloStyle.text.opacity(0.6)).padding(.top, 6).fixedSize(horizontal: false, vertical: true)
             }.foregroundStyle(HaloStyle.text)

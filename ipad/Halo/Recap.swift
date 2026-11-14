@@ -54,7 +54,7 @@ struct RecapView: View {
             }
             if let overview = store.recap?.overview, !overview.isEmpty {
                 Sticky(label: "In short", tilt: -0.4) {
-                    Text(overview).font(HaloKit.hand(27)).foregroundStyle(HaloStyle.text).lineSpacing(1).fixedSize(horizontal: false, vertical: true)
+                    Text(overview).hand(27).foregroundStyle(HaloStyle.text).lineSpacing(1).fixedSize(horizontal: false, vertical: true)
                 }.padding(.top, 2).transition(.opacity.combined(with: .offset(y: 16)))
             }
         }
@@ -86,7 +86,7 @@ struct RecapView: View {
             }.transition(.opacity)
         } else if store.recapLoading {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Summarizing your questions…").font(HaloKit.hand(26)).foregroundStyle(HaloStyle.ink)
+                Text("Summarizing your questions…").hand(26).foregroundStyle(HaloStyle.ink)
                 ForEach(0..<5, id: \.self) { row in
                     RoundedRectangle(cornerRadius: 5).fill(HaloStyle.ink.opacity(0.07)).frame(height: 13).frame(maxWidth: row % 3 == 2 ? 320 : .infinity, alignment: .leading)
                 }
@@ -98,7 +98,7 @@ struct RecapView: View {
             if let title {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(title).font(HaloKit.title(24, .semibold)).foregroundStyle(HaloStyle.text)
-                    Text("\(notes.count) question\(notes.count == 1 ? "" : "s")").font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink)
+                    Text("\(notes.count) question\(notes.count == 1 ? "" : "s")").hand(22).foregroundStyle(HaloStyle.ink)
                 }.padding(.top, 6)
             }
             ForEach(Array(notes.enumerated()), id: \.element.id) { order, session in

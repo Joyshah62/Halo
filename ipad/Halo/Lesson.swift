@@ -473,7 +473,7 @@ struct LessonBoard: View {
                 Eyebrow(store.demoMode ? "HALO · OFFLINE SAMPLE" : "HALO · YOUR CHAPTER, TOGETHER", color: HaloStyle.coral)
                 Text(coach.plan?.title ?? "A tutor. Your book. Your pace.").font(HaloKit.title(26)).fixedSize(horizontal: false, vertical: true)
                 if let thread = coach.plan?.thread, !thread.isEmpty {
-                    Text(thread).font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
+                    Text(thread).hand(21).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 8)
@@ -584,7 +584,7 @@ struct LessonBoard: View {
                 if !coach.said.isEmpty, !viewingEarlier, coach.said != coach.guesses[coach.current] || coach.question == nil {
                     HStack(spacing: 8) {
                         if coach.interjection != nil { Text("Halo's wrapping up, then it's yours").font(HaloKit.text(12)).foregroundStyle(.secondary) }
-                        Text(coach.said).font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
+                        Text(coach.said).hand(23).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
                         Text("YOU").font(HaloKit.text(9.5, .bold)).tracking(1.2).foregroundStyle(HaloStyle.ink.opacity(0.6))
                     }
                     .padding(.horizontal, 14).padding(.vertical, 6)
@@ -613,7 +613,7 @@ struct LessonBoard: View {
             Spacer(minLength: 0)
             HaloRing(size: 92, symbol: "questionmark").breathing()
             Text("What's your hunch?").font(HaloKit.title(42)).tracking(-1).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-            Text("no wrong answers. a guess just tells me where to start").font(HaloKit.hand(26)).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center)
+            Text("no wrong answers. a guess just tells me where to start").hand(26).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center)
             if let concept = coach.plan?.concepts.first(where: { $0.n == coach.current }) {
                 ScribbleChip(text: "stop \(concept.n) of \(coach.plan?.concepts.count ?? 0) · about \(concept.minutes) min", icon: "mappin.and.ellipse").padding(.top, 4)
             }
@@ -628,7 +628,7 @@ struct LessonBoard: View {
         let laid = viewingEarlier || coach.summary != nil ? LessonCoach.exhibits : coach.shown[n] ?? []
         return VStack(alignment: .leading, spacing: 18) {
                     if let guess = coach.guesses[n], !guess.isEmpty {
-                        Sticky(label: "Your hunch", tilt: -0.8) { Text(guess).font(HaloKit.hand(27)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true) }
+                        Sticky(label: "Your hunch", tilt: -0.8) { Text(guess).hand(27).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true) }
                             .frame(maxWidth: 360, alignment: .leading).padding(.leading, 4).transition(.scale(scale: 0.8).combined(with: .opacity))
                     }
                     if let material {
@@ -640,7 +640,7 @@ struct LessonBoard: View {
                         if laid.count == LessonCoach.exhibits.count { extras(material) }
                     }
                     if laid.isEmpty || material == nil {
-                        HStack(spacing: 10) { HaloRing(size: 22, working: true); Text(coach.busy ? "Halo's working out where to start…" : "Nothing on the desk yet.").font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink) }
+                        HStack(spacing: 10) { HaloRing(size: 22, working: true); Text(coach.busy ? "Halo's working out where to start…" : "Nothing on the desk yet.").hand(24).foregroundStyle(HaloStyle.ink) }
                             .padding(.vertical, 22).padding(.horizontal, 6)
                     }
                     if notes { notepad }
@@ -699,7 +699,7 @@ struct LessonBoard: View {
                     }
                 }
                 if visual.kind == "cycle" { Label("and round again", systemImage: "arrow.uturn.backward").font(HaloKit.hand(21)).foregroundStyle(HaloStyle.coral) }
-                if !visual.caption.isEmpty { Text(visual.caption).font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true) }
+                if !visual.caption.isEmpty { Text(visual.caption).hand(24).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true) }
             } else {
                 Label(material.status == "searching" ? "Halo's sketching this…" : "Halo's notes have the picture for this one.", systemImage: "scribble.variable").font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink)
             }
@@ -735,7 +735,7 @@ struct LessonBoard: View {
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(example.result).font(HaloKit.title(27, .medium)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
-                        if !example.why.isEmpty { Text(example.why).font(HaloKit.hand(23)).fixedSize(horizontal: false, vertical: true) }
+                        if !example.why.isEmpty { Text(example.why).hand(23).fixedSize(horizontal: false, vertical: true) }
                     }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(HaloKit.highlight, in: RoundedRectangle(cornerRadius: 6)).transition(.opacity)
                 }
             } else {
@@ -790,7 +790,7 @@ struct LessonBoard: View {
             ZStack(alignment: .topLeading) {
                 LessonPaper(coach: coach, session: coach.board)
                 if coach.board.messages.isEmpty {
-                    Text("I'll jot things down here as we talk.").font(HaloKit.hand(23)).foregroundStyle(HaloStyle.text.opacity(0.35)).padding(.top, 6)
+                    Text("I'll jot things down here as we talk.").hand(23).foregroundStyle(HaloStyle.text.opacity(0.35)).padding(.top, 6)
                 }
             }
             .frame(height: max(180, InkLayout.height(of: coach.board) * max(1, paperWidth - 32) / InkLayout.width))
@@ -845,7 +845,7 @@ struct LessonBoard: View {
                     FlowRow(spacing: 10) { ForEach(question.options, id: \.self) { option in choice(option) } }
                 }
                 if coach.showHint, let hint = coach.question?.hint, !hint.isEmpty {
-                    Label(hint, systemImage: "lightbulb").font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink).transition(.opacity.combined(with: .move(edge: .bottom)))
+                    Label { Text(hint).hand(24) } icon: { Image(systemName: "lightbulb") }.font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink).transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
                 HaloComposer(text: $coach.draft, prompt: prompt, recording: speech.isRecording,
                              enabled: coach.canSpeak, microphone: { coach.toggleMic() },
@@ -905,7 +905,7 @@ struct LessonBoard: View {
                                 JourneyStop(number: concept.n, verdict: got ? "got_it" : "skipped", here: false, viewing: false)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(concept.name).font(HaloKit.title(18, .medium))
-                                    Text(got ? "you've got this" : reason ?? "worth another look").font(HaloKit.hand(22)).foregroundStyle(got ? HaloKit.leaf : HaloKit.amber)
+                                    Text(got ? "you've got this" : reason ?? "worth another look").hand(22).foregroundStyle(got ? HaloKit.leaf : HaloKit.amber)
                                 }
                                 Spacer(minLength: 0)
                                 if coach.boards[concept.n] != nil { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary) }
@@ -914,7 +914,7 @@ struct LessonBoard: View {
                     }
                 }.haloCard(padding: 20)
                 if !summary.takeaway.isEmpty {
-                    Sticky(label: "The one thing to remember", tilt: -1) { Text(summary.takeaway).font(HaloKit.hand(31)).fixedSize(horizontal: false, vertical: true) }
+                    Sticky(label: "The one thing to remember", tilt: -1) { Text(summary.takeaway).hand(31).fixedSize(horizontal: false, vertical: true) }
                         .frame(maxWidth: 560).arrives(concepts.count + 2)
                 }
                 errors

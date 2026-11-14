@@ -278,7 +278,7 @@ struct QuizView: View {
         switch coach.stage {
         case .loading:
             halo(says: "Reading your notes and writing a few questions…")
-            HStack(spacing: 12) { HaloRing(size: 26, working: true); Text("writing your quiz").font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink) }
+            HStack(spacing: 12) { HaloRing(size: 26, working: true); Text("writing your quiz").hand(24).foregroundStyle(HaloStyle.ink) }
                 .padding(.leading, 6)
         case .failed(let why):
             halo(says: why)
@@ -349,13 +349,13 @@ struct QuizView: View {
                              recording: speech.isRecording, enabled: coach.stage == .asking,
                              microphone: { coach.listen() }, send: { coach.submit() })
                 if coach.stage == .marking {
-                    HStack(spacing: 10) { HaloRing(size: 18, working: true); Text("checking your answer").font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink) }
+                    HStack(spacing: 10) { HaloRing(size: 18, working: true); Text("checking your answer").hand(22).foregroundStyle(HaloStyle.ink) }
                 } else { dontKnow }
             }
         } else if let mark = coach.mark, !mark.answer.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Eyebrow("You said")
-                Text(mark.answer).font(HaloKit.hand(26)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+                Text(mark.answer).hand(26).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
             }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .background(HaloKit.highlight.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -383,7 +383,7 @@ struct QuizView: View {
             if !question.source.isEmpty {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "text.quote").font(.system(size: 13, weight: .semibold)).foregroundStyle(HaloStyle.ink.opacity(0.6))
-                    Text("From your notes: “\(question.source)”").font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
+                    Text("From your notes: “\(question.source)”").hand(22).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
                 }
             }
             HStack {
@@ -404,7 +404,7 @@ struct QuizView: View {
         halo(says: score == total ? "Every one. Your notes have this covered." : "\(score) out of \(total). Here’s what to look at again.")
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("\(score)").font(HaloKit.title(64, .semibold).monospacedDigit()).foregroundStyle(score == total ? HaloKit.leaf : HaloStyle.text)
-            Text("of \(total) right").font(HaloKit.hand(30)).foregroundStyle(HaloStyle.ink)
+            Text("of \(total) right").hand(30).foregroundStyle(HaloStyle.ink)
         }
         .accessibilityElement(children: .combine)
         VStack(spacing: 10) {

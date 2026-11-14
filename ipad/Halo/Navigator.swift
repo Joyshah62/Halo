@@ -254,7 +254,7 @@ struct NavigatorView: View {
                     }
                 }
             } footer: {
-                if store.isBook { Text("tap ✦ on a chapter and Halo reads it first").font(HaloKit.hand(20)).foregroundStyle(HaloStyle.ink) }
+                if store.isBook { Text("tap ✦ on a chapter and Halo reads it first").hand(20).foregroundStyle(HaloStyle.ink) }
             }
         } else if let map = store.notes.map, map.pages.contains(where: { !$0.topic.isEmpty }) {
             // No chapters, but Halo read the document: its page-by-page map does the same job.
@@ -265,7 +265,7 @@ struct NavigatorView: View {
                             Text("\(page.page)").font(HaloKit.text(12).monospacedDigit()).foregroundStyle(.secondary).frame(width: 28, alignment: .trailing)
                             Text(page.topic.isEmpty ? "Page \(page.page)" : page.topic.capitalized).font(HaloKit.text(15)).foregroundStyle(HaloStyle.text)
                             Spacer()
-                            if page.difficulty >= 3 { Text("tricky").font(HaloKit.hand(19)).foregroundStyle(HaloStyle.coral) }
+                            if page.difficulty >= 3 { Text("tricky").hand(19).foregroundStyle(HaloStyle.coral) }
                             noteBadge(notes.filter { $0.pageIndex == page.page - 1 }.count)
                         }.contentShape(Rectangle())
                     }.buttonStyle(.plain)
@@ -382,7 +382,7 @@ struct NoteRow: View {
                 .shadow(color: .black.opacity(0.14), radius: 2, y: 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title).font(HaloKit.text(15, .medium)).foregroundStyle(HaloStyle.text).lineLimit(2)
-                if let written = session.firstWritten { Text(written).font(.custom("Caveat-Regular", size: 20)).foregroundStyle(HaloStyle.ink).lineLimit(2) }
+                if let written = session.firstWritten { Text(written).hand(20).foregroundStyle(HaloStyle.ink).lineLimit(2) }
                 Text(caption).font(HaloKit.text(12)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)

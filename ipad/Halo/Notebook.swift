@@ -47,7 +47,7 @@ struct NotebookView: View {
             LazyVStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Eyebrow(store.notebookIsLoose ? "Quick notes" : "Notes for")
-                    Text(store.notebookIsLoose ? "not tied to a document" : store.displayTitle).font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink)
+                    Text(store.notebookIsLoose ? "not tied to a document" : store.displayTitle).hand(22).foregroundStyle(HaloStyle.ink)
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, 4).padding(.bottom, 4)
@@ -75,7 +75,7 @@ struct NotebookView: View {
             if !body.isEmpty { Text(body).font(HaloKit.text(13)).foregroundStyle(.secondary).lineLimit(2) }
             if entry.drawing != nil { Label(body.isEmpty ? "Handwritten" : "With handwriting", systemImage: "pencil.tip").font(HaloKit.text(12)).foregroundStyle(.secondary) }
             Text(store.notebookIsLoose ? entry.updatedAt.formatted(.relative(presentation: .named)) : "p. \(entry.pageIndex + 1) · \(entry.updatedAt.formatted(.relative(presentation: .named)))")
-                .font(HaloKit.hand(17)).foregroundStyle(HaloStyle.ink.opacity(0.75))
+                .hand(17).foregroundStyle(HaloStyle.ink.opacity(0.75))
         }
         .padding(.horizontal, 14).padding(.vertical, 11).frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -414,7 +414,7 @@ private struct EnhancedNoteView: View {
             }
             if !note.summary.isEmpty {
                 Sticky(label: "In short", tilt: -0.4) {
-                    Text(note.summary).font(HaloKit.hand(25)).foregroundStyle(HaloStyle.text).lineSpacing(1).fixedSize(horizontal: false, vertical: true)
+                    Text(note.summary).hand(25).foregroundStyle(HaloStyle.text).lineSpacing(1).fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let corrections = note.corrections, !corrections.isEmpty { fixes(corrections) }
@@ -458,7 +458,7 @@ private struct EnhancedNoteView: View {
                 Taped(tilt: index % 2 == 0 ? -1.2 : 1.1) {
                     VStack(alignment: .leading, spacing: 5) {
                         Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: 440, maxHeight: 300)
-                        Text("Halo drew this").font(HaloKit.hand(19)).foregroundStyle(HaloStyle.ink)
+                        Text("Halo drew this").hand(19).foregroundStyle(HaloStyle.ink)
                     }
                 }
                     .padding(.top, 14).padding(.leading, 22)
@@ -495,7 +495,7 @@ private struct EnhancedNoteView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
                 ForEach(Array(terms.enumerated()), id: \.offset) { _, item in
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(item.term).font(HaloKit.hand(26)).foregroundStyle(HaloStyle.ink)
+                        Text(item.term).hand(26).foregroundStyle(HaloStyle.ink)
                         Text(item.meaning).font(HaloKit.text(14.5)).foregroundStyle(HaloStyle.text.opacity(0.8)).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(14).frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
@@ -676,7 +676,7 @@ private struct RefinementView: View {
             ForEach(Array(points.enumerated()), id: \.offset) { _, point in
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     Text(point.added ? "✦" : "–").font(HaloKit.text(point.added ? 11 : 15, .bold)).foregroundStyle(point.added ? HaloStyle.coral : HaloStyle.ink.opacity(0.6))
-                    Text(point.text).font(.custom("Caveat-Regular", size: 23)).foregroundStyle(HaloStyle.ink).lineSpacing(-2).fixedSize(horizontal: false, vertical: true)
+                    Text(point.text).hand(23).foregroundStyle(HaloStyle.ink).lineSpacing(-2).fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let picture, let image = UIImage(data: picture) {
@@ -796,7 +796,7 @@ private struct NotesHalo: View {
         VStack(alignment: .trailing, spacing: 12) {
             if let reply = store.notesReply { bubble(reply).transition(.scale(scale: 0.8, anchor: .bottomTrailing).combined(with: .opacity)) }
             else if store.notesBusy {
-                HStack(spacing: 10) { HaloRing(size: 18, working: true); Text("looking through your notes").font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink) }
+                HStack(spacing: 10) { HaloRing(size: 18, working: true); Text("looking through your notes").hand(22).foregroundStyle(HaloStyle.ink) }
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(Color.white, in: Capsule()).shadow(color: .black.opacity(0.1), radius: 10, y: 4)
                     .transition(.opacity)
@@ -855,7 +855,7 @@ private struct NotesHalo: View {
                     .frame(width: 38, height: 38).background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 VStack(alignment: .leading, spacing: 0) {
                     Text(title).font(HaloKit.text(15.5, .semibold)).foregroundStyle(HaloStyle.text)
-                    Text(note).font(HaloKit.hand(20)).foregroundStyle(HaloStyle.ink).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                    Text(note).hand(20).foregroundStyle(HaloStyle.ink).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
             }
