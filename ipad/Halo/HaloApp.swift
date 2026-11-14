@@ -113,15 +113,16 @@ struct StudioView: View {
     var body: some View {
         GeometryReader { geometry in
             let session = store.pill != .hidden ? store.activeSession : nil
+            let fullHeight = geometry.size.height + geometry.safeAreaInsets.bottom
             // `--sideways` forces the landscape arrangement, for screenshots.
-            let sideways = geometry.size.width > geometry.size.height || CommandLine.arguments.contains("--sideways")
+            let sideways = geometry.size.width > fullHeight || CommandLine.arguments.contains("--sideways")
             let layout = sideways ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
             layout {
                 page(pointingTo: session == nil ? nil : (sideways ? Edge.trailing : Edge.bottom))
                 if let session {
                     HaloMargin(store: store, session: session, sideways: sideways)
                         .frame(width: sideways ? min(540, max(380, geometry.size.width * 0.42)) : nil,
-                               height: sideways ? nil : min(520, max(330, geometry.size.height * 0.37)))
+                               height: sideways ? nil : min(520, max(330, fullHeight * 0.37)))
                         .transition(.move(edge: sideways ? .trailing : .bottom))
                         .id(session.id)
                 }

@@ -140,7 +140,8 @@ struct PDFReader: UIViewRepresentable {
             attachScrollObserver()
             DispatchQueue.main.async { [weak self, weak overlayView] in
                 guard let self, let overlay = overlayView as? PageOverlay,
-                      self.store.tool == .write, self.view?.currentPage === page, !overlay.canvas.isFirstResponder else { return }
+                      self.store.tool == .write, self.store.pill == .hidden,
+                      self.view?.currentPage === page, !overlay.canvas.isFirstResponder else { return }
                 self.toolPicker.setVisible(true, forFirstResponder: overlay.canvas)
                 overlay.canvas.becomeFirstResponder()
             }
@@ -156,7 +157,7 @@ struct PDFReader: UIViewRepresentable {
                               insight: store.insight(for: page), drawing: store.notes.drawings[page],
                               ticks: store.notes.ticks?[page] ?? [], glance: store.glance?.page == page ? store.glance?.region : nil,
                               pointer: store.pointer?.page == page ? store.pointer : nil)
-            let writing = store.tool == .write && page == store.pageIndex
+            let writing = store.tool == .write && page == store.pageIndex && store.pill == .hidden
             if overlay.writing != writing {
                 overlay.writing = writing
                 toolPicker.setVisible(writing, forFirstResponder: overlay.canvas)

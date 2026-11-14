@@ -782,6 +782,11 @@ final class StudyStore: ObservableObject {
         if speech.isRecording { speech.stop(); pill = .typing; return }
         startListening()
     }
+    func typeInstead() {
+        silenceTask?.cancel()
+        pill = .typing
+        speech.stop()
+    }
     func startListening() {
         guard activeSession != nil else { return }
         player.stop(); silenceTask?.cancel()

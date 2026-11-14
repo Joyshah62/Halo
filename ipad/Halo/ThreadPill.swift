@@ -65,6 +65,9 @@ struct HaloMargin: View {
         }
         .shadow(color: .black.opacity(0.12), radius: 18, x: sideways ? -6 : 0, y: sideways ? 0 : -6)
         .onChange(of: store.pill) { _, state in if case .typing = state, answered { focused = true } }
+        .onChange(of: focused) { _, isFocused in
+            if isFocused, case .listening = store.pill { store.typeInstead() }
+        }
         .onAppear { pulse = true }
         .confirmationDialog("Delete this note?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete note and circle", role: .destructive) { store.deleteSession(session.id) }
