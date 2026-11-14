@@ -35,10 +35,12 @@ struct InkElement {
 @MainActor
 enum InkImages {
     private static let cache = NSCache<NSString, UIImage>()
-    static func image(_ base64: String) -> UIImage? {
-        let key = "\(base64.count)|\(base64.prefix(48))|\(base64.suffix(24))" as NSString
+    /// `trim` crops the white margin generated illustrations come with; typeset formulas and code are already tight.
+    static func image(_ base64: String, trim: Bool = true) -> UIImage? {
+        let key = "\(trim)|\(base64.count)|\(base64.prefix(48))|\(base64.suffix(24))" as NSString
         if let hit = cache.object(forKey: key) { return hit }
-        guard let image = Data(base64Encoded: base64).flatMap(UIImage.init(data:))?.trimmedWhitespace() else { return nil }
+        guard let decoded = Data(base64Encoded: base64).flatMap(UIImage.init(data:)) else { return nil }
+        let image = trim ? decoded.trimmedWhitespace() : decoded
         cache.setObject(image, forKey: key)
         return image
     }
@@ -228,7 +230,9 @@ struct InkLayout {
             case "check": addMark(check: true)
             case "cross": addMark(check: false)
             case "sketch": addSketch(item)
-            case "image": if let key = item.data, let image = InkImages.image(key) { addImage(image) }
+            // A typeset formula or code block (from "math"/"code") says how wide it wants to be; a generated
+            // illustration has no width and takes the whole column.
+            case "image": if let key = item.data, let image = InkImages.image(key, trim: item.w == nil) { addImage(image, natural: item.w.map { CGFloat($0) }) }
             default: break
             }
         }
@@ -351,8 +355,8 @@ struct InkLayout {
         lines.append(Line(x: x0, baseline: drawn.maxY, width: W))
         nextBaseline = drawn.maxY + 14 + Self.fontSize
     }
-    private mutating func addImage(_ image: UIImage) {
-        let W = columnWidth, H = W * image.size.height / max(1, image.size.width)
+    private mutating func addImage(_ image: UIImage, natural: CGFloat? = nil) {
+        let W = min(columnWidth, natural ?? columnWidth), H = W * image.size.height / max(1, image.size.width)
         let top = nextBaseline - Self.fontSize + 8
         let rect = CGRect(x: x, y: top, width: W, height: H)
         elements.append(InkElement(kind: .image, path: nil, color: .clear, width: 0, image: image, rect: rect, cost: 10))
@@ -504,12 +508,14 @@ final class MarginInkView: UIView {
 
     func render(sessions: [StudySession], active: UUID?, insight: PageInsight?, ticks: [PageRegion] = [], glance: PageRegion? = nil, pointer: PagePointing? = nil) {
         show(pointer)
-        let key = sessions.map { "\($0.id)\($0.number)\($0.messages.isEmpty)" }.joined() + "|\(active?.uuidString ?? "")|\(insight?.topic ?? "")\(insight?.difficulty ?? 0)|\(pageAspect)"
+        let key = sessions.map { "\($0.id)\($0.number)\($0.messages.isEmpty)\($0.circlePending ?? false)\($0.lasso?.first.map { "\($0.x),\($0.y)" } ?? "")" }.joined() + "|\(active?.uuidString ?? "")|\(insight?.topic ?? "")\(insight?.difficulty ?? 0)|\(pageAspect)"
             + "|\(ticks.count)|\(glance.map { "\($0.x),\($0.y)" } ?? "")"
         guard key != signature else { return }
         signature = key
-        // The circle belongs to the open note: when the note closes it fades away, and only the numbered tab stays.
-        if let shown = shownCircle, shown.id != active || !sessions.contains(where: { $0.id == shown.id }) {
+        // The circle is there to say "this part": once the question about it has been asked it fades away, and only
+        // the numbered tab stays. A circle Halo drew itself around a mistake stays while its note is open.
+        func keepsCircle(_ session: StudySession) -> Bool { session.id == active && (session.messages.isEmpty || session.circlePending == true || session.origin == "check") }
+        if let shown = shownCircle, !sessions.contains(where: { $0.id == shown.id && keepsCircle($0) }) {
             drawn.removeAll { $0 === shown.layer }
             fadeOut(shown.layer)
             shownCircle = nil
@@ -519,7 +525,7 @@ final class MarginInkView: UIView {
         var pageLevel = 0
         for session in sessions {
             let isActive = session.id == active
-            if isActive, let lasso = session.lasso, lasso.count > 2 {
+            if keepsCircle(session), let lasso = session.lasso, lasso.count > 2 {
                 let circle = circleLayer(lasso, dimmed: false)
                 // Reopening a note draws its circle back in.
                 if shownCircle?.id != session.id, !(session.origin == "check" && !penned.contains(session.id)) { pen(circle, seconds: 0.4) }

@@ -110,6 +110,39 @@ Request: `{ image (base64), imageMime, problem?, pageText?, learner? }`. Respons
 
 `HALO_MOCK=1` serves a canned chain-rule mistake through the same graph. `npm test` in `server/` runs every `*.test.mjs`: the math checker (`mathcheck.test.mjs`), the lesson agent (`lesson.test.mjs`) and lesson source material (`lesson-material.test.mjs`). Set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` to see each run as a trace.
 
+## Why am I stuck? (`POST /api/stuck`)
+
+The checker says *which line* is wrong. This says *what the student doesn't know yet* and where their own book teaches it. That is an open-ended search, so it is a [LangChain Deep Agent](https://docs.langchain.com/oss/javascript/deepagents/overview) ([server/stuck.js](server/stuck.js)) rather than a fixed graph. On the iPad it is the **Why am I stuck?** button on the note Halo opens for a mistake.
+
+| Deep Agents feature | What Halo uses it for |
+|---|---|
+| Planning (`write_todos`) | The agent writes its own 3 to 4 step plan; the app shows it ticking off live. |
+| Filesystem (`StateBackend`) | The chapter is loaded as one file per page (`/book/page-012.md`). The agent greps and reads pages instead of having the whole book in its prompt. |
+| Subagent (`book-scout`) | Does the page hunt in its own context window and returns only `{ page, quote, reason }` (typed with `responseFormat`). |
+| Custom tool | The same `check_step` calculator the checker uses, to test a suspicion about the rule that was misapplied. |
+| Long-term memory (`CompositeBackend` + `FilesystemBackend`, `memory:`) | `/memories/<learner>.md` is loaded into the prompt on every run. The agent records each gap there, so a repeat is recognised: "this is the same thing that caught you before". |
+| Permissions | `/book` is read-only; the only place the agent may write is `/memories`. The scout cannot write at all. |
+| Structured output (`responseFormat`) | A typed diagnosis: the gap, why it caused this mistake, page, exact quote, hint steps, a check question. |
+
+**What Halo remembers about a learner** is one short file with two sections, and nothing else (no name, no handwriting, no answers):
+
+```
+# Gaps Halo has seen                      ← written by this agent
+- derivative of the inside function | chain rule | seen 2 time(s) | p.3
+
+# Topics they have covered                ← written by the server from real results
+- the power rule | lesson | got it | Calculus Workbook p.1 | 2026-11-14 | 1 time(s)
+- chain rule | practice | made a mistake | Calculus Workbook p.3 | 2026-11-14 | 2 time(s)
+```
+
+Topics come from chapter lessons (each concept as it is checked: got it, got it after n tries, nearly there, still learning, skipped) and from "Halo watches you work" (solved it / made a mistake; one problem counts once however many times it is checked). The lesson planner reads them, so a concept the student already got is kept short and one they skipped gets a gentler start; this agent reads them, so its first step can say "you practised this on page 3".
+
+**Memory lives in [Backboard](https://backboard.io)** ([server/learner-memory.js](server/learner-memory.js)) when `BACKBOARD_API_KEY` is set: one Backboard assistant per learner (`halo-learner-id-<device id>`), one Backboard memory per gap. Before a run the agent's memory file is rebuilt from Backboard (about 0.1 s); after the answer is sent, the lines the agent changed are written back in the background, so the student never waits on it. Without a key, or if Backboard can't be reached, the local file in `server/memory/` is used instead. Learners are identified by an anonymous ID the iPad generates on first launch and keeps in the Keychain. There is no login; this is for the demo, and a real launch would use Sign in with Apple.
+
+The server only trusts a quote it can find in the page text it was sent; the page number follows the quote. The answer never states the corrected line.
+
+Request: `{ problem, lines, line, concept, hint?, title, chapter?, pages: [{ page, text }], learner?, learnerId? }` (the first four are the `/api/check` verdict's). Response is SSE: `todos` (the plan, whenever it changes) and `stage` (`{ name, say, page? }`, what the agent is doing now), then `diagnosis` (`gap`, `why`, `page`, `quote`, `seenBefore`, `question`), then `meta` + `step` as for `/api/ask` (the step that sends the student to the book carries a `point` with `page`), then `done`. About 10 s end to end on `gemini-3.5-flash`. `HALO_MOCK=1` serves a canned diagnosis without running the agent. With `LANGSMITH_TRACING=true` each run is a `halo-why-stuck` trace showing the plan, the subagent and every file operation.
+
 ## Chapter tutor on iPad
 
 Open a PDF, choose a chapter in **Chapters**, and tap its graduation cap (or **Teach me** in the reader). Halo builds a concept roadmap from the selected pages, teaches through textbook excerpts, visual explanations, and examples revealed one move at a time, then pauses to check understanding. Relevant web explanations and Wikimedia diagrams supplement the book with source links; handwritten notes remain available on demand. Ask questions, type or dictate answers, use a hint, and revisit earlier boards. Partial or missed answers get a new explanation and another check; moving on without understanding is an explicit choice. The final recap and teaching can be saved to My notes. See [chapter lesson details and verification](ipad/README.md#chapter-lessons).
@@ -154,3 +187,13 @@ Run extension checks with `cd extension && npm run typecheck && npm test && npm 
 4. Switch to an article → **Whole page** → “Explain the main idea.”
 5. Tutor mode on → crop a wrong homework step → Halo writes a hint.
 6. End on the confusion map.
+
+### Import PowerPoint and Word on iPad
+
+The iPad app accepts `.ppt`, `.pptx`, `.doc`, `.docx`, and PDF. Office files are converted to PDF by your Halo server, then saved locally for the same reader, annotations, search, and lesson tools. Install LibreOffice on the server and restart it; see [Office import setup](ipad/README.md#powerpoint-and-word-imports). PDF import works offline; Office conversion requires the server and accepts files up to 25 MB.
+
+### Server diagnostics
+
+Requests, stream progress, errors, disconnects, process exits, and restarts are recorded in `server/logs/server.jsonl` (gitignored). Follow them with `tail -f server/logs/server.jsonl`; override the folder with `HALO_LOG_DIR`. Every request has an `X-Halo-Request-ID` response header. Progress logs include the question ID and stage, without logging screenshots or document text. Development mode preserves terminal output across restarts. For a device demo, use `npm start` so editing source files cannot restart the server in the middle of a question or lesson.
+
+Lesson checkpoints and completed retry responses are saved in `server/lessons.sqlite` (gitignored), so a restart between turns does not lose the lesson or apply the same reply twice. Set `HALO_LESSON_DB_PATH` to choose its location. Lessons started before this persistence update must be restarted once.

@@ -38,14 +38,14 @@ struct SettingsView: View {
                 TextField("https://your-halo-server.example", text: $store.serverURL).font(.system(size: 16, design: .monospaced)).textFieldStyle(.plain)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).submitLabel(.done).onSubmit { Task { await test() } }
                     .accessibilityLabel("Halo server URL")
-                Button("Test") { Task { await test() } }.font(.system(size: 14, weight: .semibold)).foregroundStyle(HaloStyle.ink).disabled(link == .testing)
+                Button("Test") { Task { await test() } }.font(HaloKit.text(14, .semibold)).foregroundStyle(HaloStyle.ink).disabled(link == .testing)
             }
             .padding(.horizontal, 14).frame(height: 46)
             .background(HaloStyle.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(HaloStyle.ink.opacity(0.12)))
-            if case .failed(let why) = link { Text(why).font(.footnote).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true).textSelection(.enabled) }
+            if case .failed(let why) = link { Text(why).font(HaloKit.text(13)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true).textSelection(.enabled) }
             Text("Use your hosted HTTPS server, or http://your-mac.local:8787 on the same Wi-Fi for development. localhost on an iPad refers to the iPad, not your Mac. API keys stay on the server.")
-                .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(HaloKit.text(13)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }.haloCard()
     }
     @ViewBuilder private var status: some View {
@@ -70,7 +70,7 @@ struct SettingsView: View {
             DeskField(prompt: "What you’re studying", text: $store.learner.course, icon: "book")
             DeskField(prompt: "Level (e.g. first-year undergrad)", text: $store.learner.level, icon: "chart.bar")
             DeskField(prompt: "How you like things explained", text: $store.learner.style, icon: "text.bubble")
-            Text("Halo uses this, plus what you’ve asked about recently, to pitch every explanation at you.").font(.footnote).foregroundStyle(.secondary)
+            Text("Halo uses this, plus what you’ve asked about recently, to pitch every explanation at you.").font(HaloKit.text(13)).foregroundStyle(.secondary)
         }.haloCard()
     }
 
@@ -84,7 +84,13 @@ struct SettingsView: View {
             Divider().padding(.leading, 52)
             option("speaker.wave.2", HaloStyle.coral, "Read answers aloud", "Halo speaks as it writes.", $store.voiceOut)
             Divider().padding(.leading, 52)
-            option("airplane", HaloStyle.ink, "Offline sample answers", "Fixed answers from a calculus example. Turn this off to ask live questions about your own documents.", $store.demoMode)
+            option("ear", HaloStyle.coral, "Listen for “Sup Halo”",
+                   store.wake.supported
+                       ? "With a document open, say “Sup Halo” and then your question, or a request like “sup Halo, go to page 12”. Listening happens on this iPad only and keeps the microphone on, which uses more battery."
+                       : "This iPad can’t recognise speech on the device, so Halo won’t listen for its name. Tap Halo or the microphone instead.",
+                   $store.wakeWord).disabled(!store.wake.supported)
+            Divider().padding(.leading, 52)
+            option("airplane", HaloStyle.ink, "Offline sample answers", "Scripted answers for the calculus sample, for when there’s no connection. Off by default; it switches off again when you open another document.", $store.demoMode)
         }.haloCard()
     }
     private func option(_ icon: String, _ tint: Color, _ title: String, _ detail: String, _ value: Binding<Bool>) -> some View {
@@ -93,8 +99,8 @@ struct SettingsView: View {
                 Image(systemName: icon).font(.system(size: 16, weight: .medium)).foregroundStyle(tint)
                     .frame(width: 38, height: 38).background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(HaloStyle.text)
-                    Text(detail).font(.system(size: 13.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(title).font(HaloKit.text(16, .semibold)).foregroundStyle(HaloStyle.text)
+                    Text(detail).font(HaloKit.text(13.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }.tint(HaloStyle.coral).padding(.vertical, 8)
@@ -107,8 +113,8 @@ struct SettingsView: View {
                 Text("circle with the Pencil, ask out loud").font(HaloKit.hand(25))
                 Text("fingers scroll and zoom").font(HaloKit.hand(25))
                 Text("tap a circle to pick that conversation back up").font(HaloKit.hand(25))
-                Text("Without a Pencil, turn on finger circling in the bottom bar. Original PDFs are never changed; Halo’s copies, your handwriting and every conversation stay in its local library.")
-                    .font(.footnote).foregroundStyle(HaloStyle.text.opacity(0.6)).padding(.top, 6).fixedSize(horizontal: false, vertical: true)
+                Text("Without a Pencil, tap Halo and turn on finger circling (the hand) in its bar. Original PDFs are never changed; Halo’s copies, your handwriting and every conversation stay in its local library.")
+                    .font(HaloKit.text(13)).foregroundStyle(HaloStyle.text.opacity(0.6)).padding(.top, 6).fixedSize(horizontal: false, vertical: true)
             }.foregroundStyle(HaloStyle.text)
         }
     }

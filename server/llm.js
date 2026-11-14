@@ -87,7 +87,7 @@ export async function generateImage(prompt) {
     const r = await ai.models.generateContent({
       model: IMAGE_MODEL,
       contents: IMAGE_STYLE + prompt,
-      config: { responseModalities: ["IMAGE", "TEXT"] },
+      config: { responseModalities: ["IMAGE", "TEXT"], httpOptions: { timeout: 20000 } },
     });
     const part = (r.candidates?.[0]?.content?.parts || []).find((p) => p.inlineData);
     if (!part) return null;
@@ -100,24 +100,44 @@ export async function generateImage(prompt) {
 }
 
 
-/** One-shot JSON answer (used by the document digest). Returns a parsed object or throws. */
-export async function generateJSON({ images = [], text, system }) {
-  let raw = "";
-  if (PROVIDER === "claude") {
-    for await (const d of claudeStream({ images, text, system })) raw += d;
-  } else {
-    const { GoogleGenAI } = await import("@google/genai");
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const parts = [];
-    for (const im of images) { parts.push({ text: im.label }); parts.push({ inlineData: { mimeType: im.mime, data: im.data } }); }
-    parts.push({ text });
-    const config = { systemInstruction: system, maxOutputTokens: 4000, temperature: 0.5, responseMimeType: "application/json" };
-    if (/gemini-2\./i.test(MODEL)) config.thinkingConfig = { thinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET ?? 0) };
-    else config.thinkingConfig = { thinkingLevel: process.env.GEMINI_THINKING_LEVEL || "minimal" };
-    const r = await ai.models.generateContent({ model: MODEL, contents: [{ role: "user", parts }], config });
-    raw = r.text || "";
-  }
-  const cleaned = raw.replace(/```[a-z]*|```/g, "").trim();
+/** The JSON object in a model reply, tolerating code fences and stray prose around it. Throws if there isn't one. */
+export function parseJSON(raw) {
+  const cleaned = String(raw ?? "").replace(/```[a-z]*|```/g, "").trim();
   const m = cleaned.match(/\{[\s\S]*\}/);
   return JSON.parse(m ? m[0] : cleaned);
+}
+
+async function rawJSON({ images, text, system, temperature }) {
+  if (PROVIDER === "claude") {
+    let raw = "";
+    for await (const d of claudeStream({ images, text, system })) raw += d;
+    return raw;
+  }
+  const { GoogleGenAI } = await import("@google/genai");
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const parts = [];
+  for (const im of images) { parts.push({ text: im.label }); parts.push({ inlineData: { mimeType: im.mime, data: im.data } }); }
+  parts.push({ text });
+  const config = { systemInstruction: system, maxOutputTokens: 4000, temperature, responseMimeType: "application/json" };
+  if (/gemini-2\./i.test(MODEL)) config.thinkingConfig = { thinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET ?? 0) };
+  else config.thinkingConfig = { thinkingLevel: process.env.GEMINI_THINKING_LEVEL || "minimal" };
+  const r = await ai.models.generateContent({ model: MODEL, contents: [{ role: "user", parts }], config });
+  return r.text || "";
+}
+
+/**
+ * One-shot JSON answer (digest, recap, notes, lessons, web plans). Returns a parsed object or throws.
+ * Now and then the model returns JSON that doesn't parse (an unescaped quote, a cut-off reply). That is a
+ * one-off slip, so it gets one more try, a little cooler, before the caller sees an error.
+ */
+export async function generateJSON({ images = [], text, system }) {
+  let raw = await rawJSON({ images, text, system, temperature: 0.5 });
+  try { return parseJSON(raw); } catch (first) {
+    console.warn(`[json] unreadable reply (${first.message}), trying again. It began: ${raw.slice(0, 160).replace(/\s+/g, " ")}`);
+  }
+  raw = await rawJSON({ images, text, system, temperature: 0.2 });
+  try { return parseJSON(raw); } catch (second) {
+    console.warn(`[json] unreadable again: ${raw.slice(0, 160).replace(/\s+/g, " ")}`);
+    throw new Error("Halo got a garbled answer back from the model. Please try again.");
+  }
 }

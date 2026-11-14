@@ -20,14 +20,16 @@
 // grade  Judges the answer against what a right answer contains; re-explains differently after a miss, answers
 //        the student's own question if that is what came back, then puts a smaller question to them.
 // wrap   Writes the summary: what they nailed, what to revisit, the one thing to remember.
-import { StateGraph, Annotation, START, END, MemorySaver, interrupt, Command } from "@langchain/langgraph";
+import { StateGraph, Annotation, START, END, interrupt, Command } from "@langchain/langgraph";
 import { randomUUID } from "node:crypto";
+import { lessonSaver, cachedLessonReply, saveLessonReply } from "./lesson-store.js";
 import { streamText, generateJSON } from "./llm.js";
 import { speak } from "./tts.js";
 import { describeLearner } from "./prompt.js";
 import { StepQueue, readLines, despeak } from "./steps.js";
 import * as db from "./db.js";
 import { startMaterial } from "./lesson-material.js";
+import { learnerKey, recordTopics, coveredTopics } from "./learner-memory.js";
 
 const isMock = () => process.env.HALO_MOCK === "1";
 const clip = (value, n) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -46,9 +48,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // What a person says in the second after you answer them, before they have worked out their reply.
 // The app plays one the moment the student answers, so there is no dead air while the model thinks.
+// Rules: short and warm; no trailing "..." (the voice drags it into "okaaay"); no "let me think" (sounds like a
+// machine stalling); and an "answer" line must not hint at right or wrong, because the grade isn't in yet.
 const FILLERS = [
-  { kind: "guess", say: "Okay... hold that thought." }, { kind: "guess", say: "Interesting. Let's see." }, { kind: "guess", say: "Alright, let's find out." },
-  { kind: "answer", say: "Mm, okay..." }, { kind: "answer", say: "Hmm, let me think about that." }, { kind: "answer", say: "Okay, so..." },
+  { kind: "guess", say: "Ooh, interesting guess." }, { kind: "guess", say: "Nice, let's find out." }, { kind: "guess", say: "Good instinct. Let's see." },
+  { kind: "guess", say: "I like where you're going." }, { kind: "guess", say: "Fair guess. Let's test it." },
+  { kind: "answer", say: "Got it. Let's check." }, { kind: "answer", say: "Alright, let's look at that." }, { kind: "answer", say: "Okay, let's see how that holds up." },
+  { kind: "answer", say: "Right, let's walk through it." }, { kind: "answer", say: "Good, let's check it together." },
 ];
 let fillerVoices;
 function fillers() {
@@ -78,12 +84,15 @@ Reply with JSON only:
  "concepts": [{"name": "<2 to 6 words, lowercase except names>", "why": "<why it matters or what it unlocks, at most 90 characters>", "page": <the page number where the chapter introduces it>, "kind": "idea"|"definition"|"method"|"example"|"pitfall", "minutes": <1 to 4>,
    "hook": "<the question you ask BEFORE teaching this concept, to get them thinking first>"}]}
 
-The hook is what separates a tutor from a lecture: you find out what they think before you tell them anything. For each concept write one spoken question, at most 26 words, that a student can answer with a guess in a few words WITHOUT having read the chapter: a prediction ("what do you reckon happens to…"), a tiny everyday puzzle the concept will resolve, a concrete case from the chapter to guess at, or "what do you already know about…". It must not need the concept's vocabulary, must not be a quiz on the chapter, and must not give the method or the answer away (never describe the rule inside the question). Make it specific and curious, never "What do you think X is?". For the first concept, open with "So, before I show you anything..." or similar; for later ones, start with a two-to-four word bridge ("Okay, next thing." / "Now, here's a strange one."). Contractions, no LaTeX, maths in words.`;
+The hook is what separates a tutor from a lecture: you find out what they think before you tell them anything. For each concept write one spoken question, at most 26 words, that a student can answer with a guess in a few words WITHOUT having read the chapter: a prediction ("what do you reckon happens to…"), a tiny everyday puzzle the concept will resolve, a concrete case from the chapter to guess at, or "what do you already know about…". It must not need the concept's vocabulary, must not be a quiz on the chapter, and must not give the method or the answer away (never describe the rule inside the question). Make it specific and curious, never "What do you think X is?".
 
-function planText(state) {
+You may be told what this student has covered with Halo before (lessons and practice, with how it went). Use it: a concept they already got can be shorter, and its hook can build on it ("you've seen the power rule... so what happens when…"); one they were still learning or skipped deserves a gentler start; in "say", mention a connection to earlier work only if it is real. Never invent history that isn't listed. For the first concept, open with "So, before I show you anything..." or similar; for later ones, start with a two-to-four word bridge ("Okay, next thing." / "Now, here's a strange one."). Contractions, no LaTeX, maths in words.`;
+
+function planText(state, covered = []) {
   const parts = [];
   const who = describeLearner(state.learner);
   if (who) parts.push(who);
+  if (covered.length) parts.push(`What they have covered with Halo before (topic | how | result | where | last date | times):\n${covered.slice(-30).map((l) => `- ${l}`).join("\n")}`);
   parts.push(`Book or course: ${state.title || "(untitled)"}${state.chapter ? `\nChapter: ${state.chapter}` : ""}`);
   parts.push(`The chapter, page by page:\n${pagesText(state.pages, 48000)}`);
   parts.push("Draw up the roadmap as JSON.");
@@ -107,7 +116,9 @@ const MOCK_PLAN = {
 async function plan(state, config) {
   const emit = emitter(config);
   const voices = fillers();
-  const raw = isMock() ? MOCK_PLAN : await generateJSON({ system: PLAN_SYSTEM, text: planText(state) });
+  // What this learner has been through before, from Halo's memory (Backboard when configured). Never blocks the lesson.
+  const covered = await Promise.race([coveredTopics(learnerKey(state.learnerId)).catch(() => []), sleep(1500).then(() => [])]);
+  const raw = isMock() ? MOCK_PLAN : await generateJSON({ system: PLAN_SYSTEM, text: planText(state, covered) });
   const pageNumbers = state.pages.map((p) => p.page);
   const first = pageNumbers[0];
   const concepts = (Array.isArray(raw.concepts) ? raw.concepts : []).slice(0, 7).map((c, i) => ({
@@ -175,11 +186,14 @@ Spoken by a voice, so write exactly how a real person talks to one person they l
 - Sound like you're thinking alongside them: "okay so", "here's the thing", "watch this", "right?", "see that?", "hang on". One or two of these across the whole turn, not in every sentence.
 - Make it click: tie it to something they already know (an earlier concept in this lesson by name, or something they said), and give a quick way to remember it when there is one.
 - Never: "Sure!", "Great question", "Certainly", "Let's dive in", "In this step", "As we can see", "I hope this helps", "Now, let's", bullet-speak, lecture-voice, summarising yourself, or reading the book aloud.
-- No LaTeX, no markdown. Speak maths in words ("x squared plus one").
+- No markdown. LaTeX only inside a "math" item's "tex" (no $ signs); everywhere else Unicode. Speak maths in words ("x squared plus one") and code in words ("the for loop").
+- When the chapter has a formula or code, show the real thing with "math" or "code" (never code as handwriting), and explain it out loud.
 
 ═══ WHAT YOU WRITE (ink) ═══
 What a tutor jots on the paper while saying that sentence: the point of the beat in a form worth rereading. 0–3 items per beat; almost every beat writes one "text".
   {"type":"text","value":"<one handwritten line, 40–90 chars, a complete thought; Unicode maths x², √, →, ≈>"}
+  {"type":"math","tex":"<LaTeX for one formula, typeset like a textbook; for fractions, integrals, sums, matrices, subscripts>"}
+  {"type":"code","lang":"<language>","value":"<the code, real newlines as \\n, at most 12 lines of up to 50 chars>"}
   {"type":"underline","target":"previous"}   underline the previous line
   {"type":"box","target":"previous"}         box the previous line (the punchline: do this once, on the takeaway)
   {"type":"check"}                           a small tick
@@ -360,6 +374,11 @@ function mockGrade(state, concept, answer) {
   return { verdict: "almost", say: "You're close... you've got the first half.", steps: [{ say: "Just add the second half: whatever is inside the brackets gets differentiated too, and multiplied on.", ink: [{ type: "text", value: "… × inside′  (don't stop early)" }] }], follow: { ask: "So what's the one piece still missing from your answer?", expected: state.question.expected, hint: state.question.hint }, note: "stops after the outside derivative" };
 }
 
+/** Each concept goes into the learner's memory as it is checked; later checks update the result, not the count. */
+function remember(state, concept, result, first) {
+  recordTopics(learnerKey(state.learnerId), [{ topic: concept.name, how: "lesson", result, book: state.title, page: concept.page, again: !first }]);
+}
+
 async function grade(state, config) {
   const emit = emitter(config);
   const { plan } = state;
@@ -376,6 +395,7 @@ async function grade(state, config) {
   if (reply.action === "skip") {
     const say = state.current + 1 < plan.concepts.length ? "No problem, we'll leave that one for now." : "No problem, let's wrap up.";
     emit("grade", { n: concept.n, verdict: "skipped", say, audio: await speak(say), note: "" });
+    remember(state, concept, "skipped", !transcript.some((x) => x.n === concept.n));
     transcript.push({ n: concept.n, concept: concept.name, ask: state.question.ask, answer: "", verdict: "skipped" });
     const old = mastery.findIndex((m) => m.n === concept.n);
     if (old >= 0) mastery.splice(old, 1);
@@ -398,6 +418,9 @@ async function grade(state, config) {
   const attempts = state.attempts + (verdict === "question" ? 0 : 1);
   const outcome = verdict === "got_it" ? "advance" : "again";
   if (verdict !== "question") {
+    const tries = transcript.filter((x) => x.n === concept.n).length + 1;
+    const result = verdict === "got_it" ? (tries > 1 ? `got it after ${tries} tries` : "got it") : verdict === "almost" ? "nearly there" : "still learning";
+    remember(state, concept, result, tries === 1);
     transcript.push({ n: concept.n, concept: concept.name, ask: state.question.ask, answer, verdict });
     // A miss is a confusion signal: it joins the history the learner profile's weak spots are built from.
     if (verdict !== "got_it") {
@@ -481,7 +504,7 @@ async function wrap(state, config) {
 
 // ---------- graph ----------
 const LessonState = Annotation.Root({
-  id: Annotation(), title: Annotation(), chapter: Annotation(), pages: Annotation(), learner: Annotation(),
+  id: Annotation(), title: Annotation(), chapter: Annotation(), pages: Annotation(), learner: Annotation(), learnerId: Annotation(),
   plan: Annotation(), current: Annotation(), attempts: Annotation(), question: Annotation(), reply: Annotation(),
   teaching: Annotation(), exchanges: Annotation(), material: Annotation(), outcome: Annotation(), mastery: Annotation(), transcript: Annotation(), summary: Annotation(),
   announced: Annotation(), hooked: Annotation(), guess: Annotation(), review: Annotation(), styles: Annotation(),
@@ -503,7 +526,7 @@ export const lessonGraph = new StateGraph(LessonState)
   .addEdge("ask", "grade")
   .addConditionalEdges("grade", afterGrade, { ask: "ask", open: "open_concept", teach: "teach", wrap: "wrap" })
   .addEdge("wrap", END)
-  .compile({ checkpointer: new MemorySaver() });
+  .compile({ checkpointer: lessonSaver });
 
 const settings = (id) => ({ configurable: { thread_id: id }, streamMode: "custom", runName: "halo-lesson", tags: ["halo", "lesson"] });
 
@@ -539,8 +562,8 @@ const active = new Map();
 const replies = new Map();
 export async function continueLesson(id, reply, send) {
   const key = `${id}:${reply.requestID || ""}`;
-  if (reply.requestID && replies.has(key)) {
-    const cached = replies.get(key);
+  const cached = reply.requestID ? replies.get(key) || cachedLessonReply(key) : undefined;
+  if (cached) {
     for (const [event, data] of cached.events) send(event, data);
     return cached.result;
   }
@@ -561,7 +584,9 @@ export async function continueLesson(id, reply, send) {
     const paused = snapshot.tasks?.some((t) => t.interrupts?.length);
     const result = await run(id, paused ? new Command({ resume: reply }) : null, (event, data) => { events.push([event, data]); send(event, data); });
     if (reply.requestID) {
-      replies.set(key, { events, result });
+      const completed = { events, result };
+      saveLessonReply(key, completed);
+      replies.set(key, completed);
       // Audio is large; retain only recent retries.
       while (replies.size > 64) replies.delete(replies.keys().next().value);
     }

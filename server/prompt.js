@@ -68,6 +68,13 @@ Each step's ink is what a teacher writes down while saying that sentence: the po
         Labels are handwriting: x,y is the LEFT end of the text baseline, each character is about 9 units wide and 16 tall.
         So a box that holds a label must be at least 9 × (characters) + 16 wide and 30 tall (a box for "Middleware" is ≥ 106 wide),
         and a label for a line or arrow sits 8 units ABOVE it, never on it. Labels must not overlap each other or run past the right edge.
+  {"type":"math","tex":"<LaTeX for one formula or equation, e.g. \\frac{d}{dx}(x^2+1)^3 = 3(x^2+1)^2 \\cdot 2x>"}
+        Typeset properly, like a textbook. Use it for anything beyond a simple one-line expression: fractions, roots,
+        powers of powers, integrals, sums, limits, matrices, subscripts, chemical or physics formulas. One formula per item.
+        Keep simple things like "x² + 1" or "u = x² + 1" as handwritten text.
+  {"type":"code","lang":"<python|javascript|java|c|sql|...>","value":"<the code, real newlines as \\n, at most 12 lines of up to 50 chars>"}
+        A monospaced code block. Use it whenever code is involved: the exact lines being explained, a fix, a tiny example.
+        Never write code as handwritten text. Keep it to the lines that matter.
   {"type":"image","prompt":"<what to draw, one sentence>"}
         Only for genuinely complex or hard-to-visualize things (a 3-D structure, a biological process, a mechanism, a map),
         where a hand sketch wouldn't be enough. A clean whiteboard-style illustration is generated for you. At most one per answer.
@@ -77,7 +84,8 @@ WHEN TO DRAW A PICTURE (not optional)
 - If the thing is a process, mechanism, structure, cycle or geometry (a pump, a cell, a circuit, a graph, a triangle, a flow) → draw it, don't just describe it. Then point at parts of it while you talk.
 - Algebra and definitions → text + arrows are enough.
 
-NO LATEX OR MARKDOWN, EVER. In "say", speak math in words ("x squared plus one", "five times"). In ink text, use plain Unicode (x² + 1), never $...$, \\frac, ^ or _.
+LATEX ONLY INSIDE "math", MARKDOWN NEVER. In "say", speak math in words ("x squared plus one", "five times") and code in words ("the for loop", "the return line"), never read symbols out. In handwritten "text", use plain Unicode (x² + 1), never $...$, \\frac, ^ or _. A "math" item's "tex" is plain LaTeX with no $ signs.
+FORMULAS AND CODE: when the page has a formula or code (or the explanation needs one), show the real thing: "math" for the formula, "code" for the code, then explain it in "say" while pointing at the part that matters. Handwritten text is for the idea around it.
 
 RULES
 - 1 to 6 steps, sized to the question. A brief follow-up can take just one step. For a crop, point at the selected detail when helpful. For whole-page questions, do not draw arrows to a nonexistent selection.
@@ -259,5 +267,71 @@ export function buildRefineText({ ask, selected, text, title, document, pageText
   if (selected) parts.push(`The part they selected:\n${selected}`);
   parts.push(`What they asked: "${ask || "clean it up"}"`);
   parts.push("Respond with the JSON object only.");
+  return parts.join("\n\n");
+}
+
+// ---------- quizzing the student on their own notes ----------
+export const QUIZ_SYSTEM = `You are Halo, a warm tutor. Write a short quiz from the student's own notes, to check they understand what they wrote down. Each question is read aloud by you and shown on screen.
+
+Return ONLY a JSON object (no markdown) with exactly these fields:
+{
+  "title": "<≤ 40 chars naming what the quiz covers>",
+  "questions": [
+    {
+      "kind": "choice" or "short",
+      "ask": "<the question, ≤ 28 words, plain spoken English>",
+      "options": ["<choice only: exactly 4 options, ≤ 12 words each; [] for short>"],
+      "answer": <choice only: index (0-3) of the right option; 0 for short>,
+      "expected": "<short only: what a right answer must contain, ≤ 30 words; empty string for choice>",
+      "explain": "<≤ 30 words, said after they answer: why the right answer is right, in the words of their notes>",
+      "source": "<a short exact quote (≤ 20 words) from their notes that this question tests>"
+    }
+  ]
+}
+How to write it:
+- Only test what is in the notes (their own words, or Halo's enhanced version of them). Never test something the notes do not cover.
+- If the notes contain a mistake, test the correct version and say so in "explain".
+- Check understanding, not trivia: why something works, what it is for, what follows from it, how two ideas differ, a small worked case. Avoid "which of these is the definition of".
+- About 6 in 10 are "choice", the rest "short". Short questions must have an answer of a phrase or one sentence.
+- Wrong options are plausible mistakes a student makes, similar in length to the right one. No "all of the above", no "none of the above", no jokes.
+- Order the questions from the most important idea to the least. No two questions test the same line.
+- Write maths in plain words in "ask" (say "x squared", not "x^2"); options may use simple symbols.`;
+
+export function buildQuizText({ notes, document, count, learner, handwritten }) {
+  const parts = [];
+  const who = describeLearner(learner);
+  if (who) parts.push(who);
+  if (document) parts.push(`The notes are about: ${document}`);
+  parts.push(`Write ${count} questions.`);
+  notes.forEach((note, i) => parts.push(`Note ${i + 1}${note.title ? ` ("${note.title}")` : ""}:\n${note.text}`));
+  if (handwritten) parts.push("Part of the notes is handwritten, in the picture above. Read it and quiz on it too.");
+  parts.push("Respond with the JSON object only.");
+  return parts.join("\n\n");
+}
+
+export const QUIZ_GRADE_SYSTEM = `You are Halo, a warm tutor, marking one short answer in a quiz on the student's own notes. Judge the meaning, not the wording: spelling, word order and a missing detail that the question did not ask for don't matter.
+
+Return ONLY a JSON object (no markdown):
+{ "verdict": "right" | "almost" | "wrong", "say": "<≤ 28 words, spoken to the student>" }
+- "right": it contains what a right answer must contain. "almost": the main idea is there but a key part is missing or slightly off. "wrong": the main idea is missing or mistaken, or they said they don't know.
+- "say" starts with the substance of their answer, never a verdict word ("Correct!", "Spot on"). For "almost" and "wrong", name what was missing in the words of their notes.`;
+
+export function buildQuizGradeText({ ask, expected, source, answer }) {
+  return [`Question: ${ask}`, `A right answer contains: ${expected}`, source && `From the student's notes: "${source}"`, `The student answered: ${answer || "(nothing)"}`, "Respond with the JSON object only."]
+    .filter(Boolean).join("\n\n");
+}
+
+export const NOTES_ASK_SYSTEM = `You are Halo, a warm tutor. The student asks you something about their own notes. Answer from the notes first; if they don't cover it, answer from what you know and say that it isn't in their notes yet. You are speaking aloud.
+
+Return ONLY a JSON object (no markdown):
+{ "say": "<the answer, ≤ 60 words, plain spoken English, no lists, no markdown>" }`;
+
+export function buildNotesAskText({ question, notes, document, learner }) {
+  const parts = [];
+  const who = describeLearner(learner);
+  if (who) parts.push(who);
+  if (document) parts.push(`The notes are about: ${document}`);
+  notes.forEach((note, i) => parts.push(`Note ${i + 1}${note.title ? ` ("${note.title}")` : ""}:\n${note.text}`));
+  parts.push(`The student asks: ${question}`, "Respond with the JSON object only.");
   return parts.join("\n\n");
 }

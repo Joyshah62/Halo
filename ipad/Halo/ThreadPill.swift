@@ -77,11 +77,14 @@ struct HaloMargin: View {
     // MARK: header
     private var header: some View {
         HStack(spacing: 12) {
+            // Halo itself, talking, listening and thinking along with the note.
+            TutorAvatar(cue: store.haloCue, size: 78, voiceLevel: { [store] in store.player.outputLevel }, micLevel: { [speech] in CGFloat(speech.meter.value) })
+                .frame(width: 60, height: 60).padding(.trailing, -2)
             Text("\(session.number)").font(HaloKit.hand(40)).foregroundStyle(HaloStyle.coral).frame(minWidth: 22).offset(y: -2)
             VStack(alignment: .leading, spacing: 1) {
                 Eyebrow(answered ? "Halo’s note" : "Ask Halo", color: HaloStyle.coral)
                 Text(session.topic.isEmpty ? store.pageLabel(session.pageIndex) : "\(session.topic) · \(store.pageLabel(session.pageIndex))")
-                    .font(.system(size: 14, weight: .medium)).foregroundStyle(noteSecondary).lineLimit(1)
+                    .font(HaloKit.text(14, .medium)).foregroundStyle(noteSecondary).lineLimit(1)
             }
             Spacer(minLength: 6)
             if !session.messages.isEmpty {
@@ -110,13 +113,13 @@ struct HaloMargin: View {
             if case .listening(let heard) = store.pill {
                 Text(heard.isEmpty ? "ask your question out loud" : "“\(heard)”").font(HaloKit.hand(32)).foregroundStyle(HaloStyle.ink)
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).animation(.easeOut(duration: 0.15), value: heard)
-                Text("I’ll answer when you pause").font(.system(size: 13.5)).foregroundStyle(noteSecondary)
+                Text("I’ll answer when you pause").font(HaloKit.text(13.5)).foregroundStyle(noteSecondary)
             } else {
                 Text("what do you want to know about this?").font(HaloKit.hand(30)).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center)
                 FlowRow(spacing: 8) {
                     ForEach(Self.starters, id: \.self) { starter in
                         Button { store.setDraft(starter); store.ask() } label: {
-                            Text(starter).font(.system(size: 14.5, weight: .medium)).padding(.horizontal, 13).padding(.vertical, 8)
+                            Text(starter).font(HaloKit.text(14.5, .medium)).padding(.horizontal, 13).padding(.vertical, 8)
                                 .background(Color.white.opacity(0.8), in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.14))).foregroundStyle(HaloStyle.ink)
                         }.buttonStyle(.plain)
                     }
@@ -130,12 +133,14 @@ struct HaloMargin: View {
     // MARK: listen / type / status
     private var controls: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if store.busy, !store.agentTodos.isEmpty, !speaking { agentPlan }
             if showsStatus {
                 HStack(alignment: .top, spacing: 12) {
-                    micButton(size: 44)
+                    Image(systemName: micSymbol).font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(HaloStyle.coral).frame(width: 30, height: 44)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title).font(.system(size: 13, weight: .bold)).tracking(0.6).foregroundStyle(HaloStyle.coral).lineLimit(1)
-                        Text(subtitle).font(.system(size: 16.5)).foregroundStyle(subtitleStyle).lineSpacing(2).lineLimit(sideways ? 5 : 4).fixedSize(horizontal: false, vertical: true)
+                        Text(title).font(HaloKit.text(13, .bold)).tracking(0.6).foregroundStyle(HaloStyle.coral).lineLimit(1)
+                        Text(subtitle).font(HaloKit.text(16.5)).foregroundStyle(subtitleStyle).lineSpacing(2).lineLimit(sideways ? 5 : 4).fixedSize(horizontal: false, vertical: true)
                             .animation(.easeOut(duration: 0.15), value: subtitle)
                     }
                     Spacer(minLength: 0)
@@ -143,12 +148,39 @@ struct HaloMargin: View {
                 .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
+            if store.pill == .ready, store.canAskWhyStuck {
+                Button { store.whyStuck() } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "questionmark.bubble").font(.system(size: 15, weight: .semibold))
+                        Text("Why am I stuck?").font(HaloKit.text(15, .semibold))
+                        Text("Halo checks your book").font(HaloKit.text(13.5)).opacity(0.85).lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(.white).padding(.horizontal, 14).padding(.vertical, 11)
+                    .background(HaloStyle.ink, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                }.buttonStyle(.plain).accessibilityHint("Halo finds the idea behind this mistake and where your book teaches it")
+            }
+            if store.pill == .ready, let found = session.stuck, found.page > 0 {
+                Button { store.openStuckPage() } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "book.pages").font(.system(size: 15, weight: .semibold))
+                        Text("Page \(found.page)").font(HaloKit.text(15, .semibold))
+                        Text(found.gap).font(HaloKit.text(13.5)).opacity(0.8).lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(HaloStyle.ink).padding(.horizontal, 14).padding(.vertical, 11)
+                    .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(HaloStyle.ink.opacity(0.14)))
+                }.buttonStyle(.plain).accessibilityHint("Opens the page of your book that teaches this")
+            }
             if store.pill == .ready, answered {
                 Button { store.diveFromSession() } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "globe").font(.system(size: 15, weight: .semibold))
-                        Text("Go deeper").font(.system(size: 15, weight: .semibold))
-                        Text("videos · pictures · sources").font(.system(size: 13.5)).opacity(0.85).lineLimit(1)
+                        Text("Go deeper").font(HaloKit.text(15, .semibold))
+                        Text("videos · pictures · sources").font(HaloKit.text(13.5)).opacity(0.85).lineLimit(1)
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .bold))
                     }
@@ -157,22 +189,35 @@ struct HaloMargin: View {
                 }.buttonStyle(.plain).accessibilityHint("Halo looks this up on the web")
             }
             if showsInput {
-                HStack(spacing: 10) {
-                    if !showsStatus { micButton(size: 40) }
-                    TextField(inputPlaceholder, text: Binding(get: { store.draft }, set: { store.setDraft($0) }), axis: .vertical)
-                        .lineLimit(1...3).font(.system(size: 16)).textFieldStyle(.plain)
-                        .padding(.horizontal, 14).padding(.vertical, 11)
-                        .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(focused ? HaloStyle.ink.opacity(0.6) : Color.black.opacity(0.1)))
-                        .focused($focused).submitLabel(.send).onSubmit { store.ask() }
-                        .accessibilityLabel("Your question")
-                    Button { store.ask() } label: { Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).frame(width: 40, height: 40) }
-                        .buttonStyle(.plain).foregroundStyle(.white).background(canSend ? HaloStyle.coral : Color.black.opacity(0.18), in: Circle())
-                        .disabled(!canSend).accessibilityLabel("Send")
-                }
+                HaloComposer(text: Binding(get: { store.draft }, set: { store.setDraft($0) }),
+                             prompt: inputPlaceholder, recording: speech.isRecording, canSend: canSend,
+                             microphone: { store.toggleListening() }, focus: $focused,
+                             send: { store.ask() })
             }
         }
         .padding(.top, 8)
+    }
+
+    private var speaking: Bool { if case .speaking = store.pill { return true }; return false }
+    /// The deep agent's own to-do list, ticking off while it works, with what it is doing right now underneath.
+    private var agentPlan: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(Array(store.agentTodos.enumerated()), id: \.offset) { _, todo in
+                HStack(spacing: 9) {
+                    Image(systemName: todo.status == "completed" ? "checkmark.circle.fill" : todo.status == "in_progress" ? "circle.dotted" : "circle")
+                        .font(HaloKit.text(15, .semibold)).foregroundStyle(todo.status == "pending" ? faint : HaloStyle.coral)
+                    Text(todo.content).font(HaloKit.text(15)).foregroundStyle(todo.status == "pending" ? noteSecondary : HaloStyle.text)
+                        .strikethrough(todo.status == "completed", color: noteSecondary).lineLimit(2)
+                }
+            }
+            if !store.agentStage.isEmpty {
+                Text(store.agentStage).font(HaloKit.text(13.5)).foregroundStyle(noteSecondary).lineLimit(1).padding(.leading, 24)
+                    .animation(.easeOut(duration: 0.15), value: store.agentStage)
+            }
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityElement(children: .combine).accessibilityLabel("Halo is working on it")
     }
 
     private func micButton(size: CGFloat) -> some View {
@@ -419,11 +464,11 @@ struct TranscriptView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(session.title).font(.headline)
+                Text(session.title).font(HaloKit.text(17, .semibold))
                 ForEach(session.messages) { message in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(message.role == "user" ? "You" : "Halo").font(.caption.weight(.semibold)).foregroundStyle(message.role == "user" ? HaloStyle.coral : HaloStyle.ink)
-                        Text(message.text).font(.subheadline).textSelection(.enabled)
+                        Text(message.role == "user" ? "You" : "Halo").font(HaloKit.text(12, .semibold)).foregroundStyle(message.role == "user" ? HaloStyle.coral : HaloStyle.ink)
+                        Text(message.text).font(HaloKit.text(15)).textSelection(.enabled)
                         let written = message.ink.compactMap { $0.type == "text" ? $0.value : nil }
                         if !written.isEmpty { Text(written.joined(separator: "   ")).font(.custom("Caveat-Regular", size: 22)).foregroundStyle(HaloStyle.ink) }
                     }

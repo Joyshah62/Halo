@@ -43,106 +43,133 @@ struct LandingView: View {
         ScrollView {
             VStack(spacing: 34) {
                 hero.arrives(0)
-                lookup.arrives(2)
-                if let recent = store.documents.first { resume(recent).arrives(3) }
+                ask.arrives(1)
+                actions.arrives(2)
+                if !store.documents.isEmpty { shelf.arrives(3) }
                 grid
                 footer
             }
-            .padding(.horizontal, 32).padding(.top, 44).padding(.bottom, 48)
+            .padding(.horizontal, 32).padding(.top, 36).padding(.bottom, 48)
             .frame(maxWidth: 1040)
             .frame(maxWidth: .infinity)
         }
         .background(DeskPaper().ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
+        .onAppear { greetedAt = Date() }
     }
 
-    // MARK: hero
+    // MARK: hero: Halo says hello
+    @State private var greetedAt = Date()
+    @State private var pokes = 0
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let hello = hour < 5 ? "Up late" : hour < 12 ? "Morning" : hour < 18 ? "Hey" : "Evening"
+        return store.learner.name.isEmpty ? "\(hello)! I’m Halo." : "\(hello), \(store.learner.name)."
+    }
     private var hero: some View {
-        VStack(spacing: 18) {
-            ZStack {
-                HaloRing(size: 72)
-                Text("halo.").font(HaloKit.hand(28)).foregroundStyle(HaloStyle.ink).offset(x: 58, y: 28)
-            }.padding(.bottom, 6)
-            Text(store.learner.name.isEmpty ? "A tutor that lives\nin your reading." : "Hey \(store.learner.name).\nWhat are we working on?")
-                .font(.system(size: 50, design: .serif)).foregroundStyle(HaloStyle.text).multilineTextAlignment(.center)
-            Text("Bring your lecture slides, a textbook or a problem set. Halo reads it with you, answers out loud when you circle something, checks your working, looks things up on the web, and turns your notes into ones worth revising from.")
-                .font(.system(size: 17)).foregroundStyle(.secondary).multilineTextAlignment(.center).lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true).frame(maxWidth: 680)
-            HStack(spacing: 12) {
-                Button(action: importPDF) { Label("Import a PDF", systemImage: "plus").frame(minWidth: 150) }.buttonStyle(PillButtonStyle())
-                Button { store.openQuickNotes(new: true) } label: { Label("Start a note", systemImage: "square.and.pencil").frame(minWidth: 150) }
-                    .buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: false))
-                Button { Task { await store.openSample() } } label: { Label("Try a sample lesson", systemImage: "play.fill").frame(minWidth: 150) }
-                    .buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: false))
-            }.padding(.top, 8)
-            Text("circle anything · ask out loud · watch it answer").font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink.opacity(0.8)).rotationEffect(.degrees(-1))
-            if let error = store.error { Text(error).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center) }
+        VStack(spacing: 6) {
+            // Halo greets you, and reacts when poked.
+            Button { pokes += 1; greetedAt = Date() } label: {
+                TutorAvatar(cue: TutorCue(base: .idle, reaction: pokes == 0 ? .happy : (pokes % 3 == 0 ? .proud : .wink), reactionUntil: greetedAt.addingTimeInterval(pokes == 0 ? 2.2 : 1.4),
+                                          sleepAt: greetedAt.addingTimeInterval(90)), size: 190)
+            }.buttonStyle(.plain).accessibilityLabel("Halo")
+            Text(greeting).font(HaloKit.title(50)).foregroundStyle(HaloStyle.text).multilineTextAlignment(.center)
+            Text("What are we learning today?").font(HaloKit.hand(34)).foregroundStyle(HaloStyle.ink).rotationEffect(.degrees(-1))
+            if let error = store.error { Text(error).font(HaloKit.text(13)).foregroundStyle(.red).multilineTextAlignment(.center).padding(.top, 6) }
         }
     }
 
-    // MARK: ask the web
-    private static let ideas = ["Why is the sky blue?", "How does CRISPR edit a gene?", "Why does the chain rule multiply?"]
-    private var lookup: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("NEW").font(.system(size: 10.5, weight: .bold)).tracking(1.1).foregroundStyle(.white).padding(.horizontal, 7).padding(.vertical, 3).background(HaloStyle.coral, in: Capsule())
-                Text("Halo goes and finds out").font(.system(size: 22, weight: .semibold, design: .serif)).foregroundStyle(HaloStyle.text)
-                Spacer(minLength: 0)
-                Text("it even watches the video").font(.custom("Caveat-Regular", size: 23)).foregroundStyle(HaloStyle.ink).rotationEffect(.degrees(-1.5)).lineLimit(1)
-            }
-            Text("Ask anything, or say “show me a video” after you circle. Halo searches the web, explains it with sources you can open, pins up real pictures, and watches the best video so it can skip you to the part that answers your question.")
-                .font(.system(size: 14.5)).foregroundStyle(.secondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                Image(systemName: "globe").font(.system(size: 17, weight: .medium)).foregroundStyle(HaloStyle.coral)
-                TextField("Look something up…", text: $question).font(.system(size: 17)).textFieldStyle(.plain).submitLabel(.search).onSubmit(look)
-                Button(action: look) {
-                    Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).frame(width: 34, height: 34)
-                        .background(question.trimmingCharacters(in: .whitespaces).isEmpty ? HaloStyle.ink.opacity(0.2) : HaloStyle.coral, in: Circle()).foregroundStyle(.white)
-                }.buttonStyle(.plain).disabled(question.trimmingCharacters(in: .whitespaces).isEmpty).accessibilityLabel("Look it up")
-            }
-            .padding(.leading, 16).padding(.trailing, 8).frame(height: 52)
-            .background(HaloStyle.paper, in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.14)))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Self.ideas, id: \.self) { idea in
-                        Button { store.startDive(idea) } label: {
-                            Text(idea).font(.system(size: 13.5, weight: .medium)).lineLimit(1).padding(.horizontal, 12).padding(.vertical, 7)
-                                .background(HaloStyle.ink.opacity(0.07), in: Capsule()).foregroundStyle(HaloStyle.ink)
-                        }.buttonStyle(.plain)
-                    }
+    // MARK: ask anything
+    private static let ideas = ["Why is the sky blue?", "How does CRISPR edit a gene?", "Why does the chain rule multiply?", "Show me a video on black holes"]
+    private var ask: some View {
+        VStack(spacing: 12) {
+            HaloComposer(text: $question, prompt: "Ask Halo…", send: look)
+            FlowRow(spacing: 8) {
+                ForEach(Self.ideas, id: \.self) { idea in
+                    Button { store.askHalo(idea) } label: {
+                        Text(idea).font(HaloKit.hand(22)).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 14).padding(.vertical, 5)
+                            .background(Color.white.opacity(0.85), in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12))).foregroundStyle(HaloStyle.ink)
+                    }.buttonStyle(.plain)
                 }
             }
+            Text("I look it up, explain it with sources, pin up real pictures and find the right moment in a video.")
+                .font(HaloKit.text(14)).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
-        .padding(22)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(HaloStyle.coral.opacity(0.35), lineWidth: 1.5))
-        .shadow(color: HaloStyle.coral.opacity(0.1), radius: 18, y: 8)
+        .frame(maxWidth: 720)
     }
     private func look() {
         let asked = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !asked.isEmpty else { return }
-        question = ""; store.startDive(asked)
+        question = ""; store.askHalo(asked)
     }
 
-    // MARK: pick up where you left off
-    private func resume(_ item: LibraryDocument) -> some View {
-        Button { Task { await store.open(item) } } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "book.pages").font(.system(size: 22)).foregroundStyle(HaloStyle.coral)
-                    .frame(width: 46, height: 46).background(HaloStyle.coral.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("PICK UP WHERE YOU LEFT OFF").font(.system(size: 10.5, weight: .bold)).tracking(1.1).foregroundStyle(.secondary)
-                    Text(item.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(HaloStyle.text).lineLimit(1)
-                    Text("\(item.pageCount) pages · opened \(item.lastOpenedAt.formatted(.relative(presentation: .named)))").font(.caption).foregroundStyle(.secondary)
+    // MARK: the ways in
+    private var actions: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 14)], spacing: 14) {
+            way("plus", "Import a document", "PDF, PowerPoint or Word", HaloStyle.coral, filled: true, action: importPDF)
+            way("play.fill", "Try a sample lesson", "two minutes, no setup", HaloStyle.ink) { Task { await store.openSample() } }
+            way("square.and.pencil", "Start a note", store.looseNotes.isEmpty ? "rough is fine, I’ll tidy it" : "\(store.looseNotes.count) quick note\(store.looseNotes.count == 1 ? "" : "s")", HaloKit.amber) { store.openQuickNotes(new: store.looseNotes.isEmpty) }
+        }
+        .frame(maxWidth: 760)
+    }
+    private func way(_ icon: String, _ title: String, _ note: String, _ tint: Color, filled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon).font(.system(size: 17, weight: .semibold)).foregroundStyle(filled ? tint : .white)
+                    .frame(width: 42, height: 42).background(filled ? Color.white : tint, in: Circle())
+                VStack(alignment: .leading, spacing: 0) {
+                    // Three cards share a row on a 10.5-inch iPad (about 240pt each): wrap rather than cut words off.
+                    Text(title).font(HaloKit.text(16.5, .semibold)).foregroundStyle(filled ? .white : HaloStyle.text)
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                    Text(note).font(HaloKit.hand(21)).foregroundStyle(filled ? Color.white.opacity(0.92) : HaloStyle.ink)
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
-                Image(systemName: "arrow.right").font(.system(size: 15, weight: .semibold)).foregroundStyle(HaloStyle.ink)
+                Spacer(minLength: 0)
             }
-            .padding(16).frame(maxWidth: 560)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: .black.opacity(0.06), radius: 14, y: 6)
+            .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .background(filled ? tint : Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: (filled ? tint : Color.black).opacity(filled ? 0.25 : 0.06), radius: 14, y: 6)
             .contentShape(Rectangle())
         }.buttonStyle(.plain)
+    }
+
+    // MARK: your shelf
+    private var shelf: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Eyebrow("Your shelf")
+                Text("tap one to pick up where you left off").font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink.opacity(0.8))
+            }.padding(.leading, 4)
+            // As many across as fit whole (four on a 10.5-inch iPad), then onto the next row: no card is cut off by the edge.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 166), spacing: 18, alignment: .top)], alignment: .leading, spacing: 28) {
+                ForEach(Array(shelfItems.prefix(8).enumerated()), id: \.element.id) { index, item in
+                    Button { Task { await store.open(item) } } label: { book(item, latest: index == 0, tilt: [-1.4, 1.1, -0.6, 1.6][index % 4]) }.buttonStyle(.plain)
+                }
+            }.padding(.horizontal, 6).padding(.top, 14).padding(.bottom, 12)
+        }
+    }
+    /// Your documents, with the sample lesson only once however many times it was opened (newest copy).
+    private var shelfItems: [LibraryDocument] {
+        var sampleShown = false
+        return store.documents.filter { item in
+            guard item.name == "A little calculus" else { return true }
+            defer { sampleShown = true }
+            return !sampleShown
+        }
+    }
+    private func book(_ item: LibraryDocument, latest: Bool, tilt: Double) -> some View {
+        Taped(tilt: tilt) {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: "book.pages").font(.system(size: 20)).foregroundStyle(HaloStyle.coral)
+                    .frame(width: 42, height: 42).background(HaloStyle.coral.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                Text(item.displayName).font(HaloKit.title(15.5, .semibold)).foregroundStyle(HaloStyle.text).lineLimit(5).minimumScaleFactor(0.85).multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
+                Text("\(item.pageCount) pages").font(HaloKit.text(12)).foregroundStyle(.secondary)
+                Text(latest ? "continue →" : item.lastOpenedAt.formatted(.relative(presentation: .named))).font(HaloKit.hand(21)).foregroundStyle(latest ? HaloStyle.coral : HaloStyle.ink).lineLimit(1)
+            }
+            .padding(10).frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .accessibilityElement(children: .combine).accessibilityHint("Opens this document")
     }
 
     // MARK: what it does
@@ -168,8 +195,8 @@ struct LandingView: View {
                 Spacer(minLength: 6)
                 Text("\(feature.id + 1)").font(HaloKit.hand(34)).foregroundStyle(feature.accent.opacity(0.55))
             }
-            Text(feature.title).font(.system(size: 19, weight: .semibold, design: .serif)).foregroundStyle(HaloStyle.text)
-            Text(feature.detail).font(.system(size: 14.5)).foregroundStyle(.secondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+            Text(feature.title).font(HaloKit.title(19, .semibold)).foregroundStyle(HaloStyle.text)
+            Text(feature.detail).font(HaloKit.text(14.5)).foregroundStyle(.secondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Text(feature.scribble).font(.custom("Caveat-Regular", size: 23)).foregroundStyle(HaloStyle.ink).rotationEffect(.degrees(-1.5))
         }
@@ -183,9 +210,9 @@ struct LandingView: View {
     // MARK: footer
     private var footer: some View {
         VStack(spacing: 6) {
-            Text("Works best with Apple Pencil. A finger works too: switch it on in the bottom bar.")
+            Text("Works best with Apple Pencil. A finger works too: tap Halo, then the hand in its bar.")
             Text("Your documents and notes stay on this iPad. What you circle or ask about is sent to your Halo server.")
         }
-        .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 560)
+        .font(HaloKit.text(12)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 560)
     }
 }

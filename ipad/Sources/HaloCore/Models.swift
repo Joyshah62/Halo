@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// Top-left coordinates relative to the displayed PDF page, independent of zoom.
 public struct PageRegion: Codable, Equatable, Sendable {
@@ -74,6 +75,8 @@ public struct DigestRequest: Encodable, Sendable {
     public var learner: LearnerProfile?
     /// Set when the pages are one chapter of a longer book, so the brief is about that chapter.
     public var chapter: String?
+    /// Lessons record what was covered, and plan around it, per device (anonymous; see DeviceID).
+    public var learnerId = DeviceID.current
     public init(title: String, pages: [DigestPage], learner: LearnerProfile?, chapter: String? = nil) { self.title = title; self.pages = pages; self.learner = learner; self.chapter = chapter }
 }
 
@@ -138,6 +141,10 @@ public struct InkItem: Codable, Equatable, Sendable {
     public var line: Int?
     /// "point": "highlight", "underline" or "circle".
     public var style: String?
+    /// "point": the 1-based page the quote is on, when it is not the page the note belongs to.
+    public var page: Int?
+    /// A typeset formula or code block (an "image" made from "math"/"code"): its LaTeX or source, as text.
+    public var alt: String?
     public init(type: String, value: String? = nil) { self.type = type; self.value = value }
 }
 public struct AnswerStep: Codable, Equatable, Sendable {
@@ -151,6 +158,19 @@ public struct AnswerStep: Codable, Equatable, Sendable {
         self.index = index; self.say = say; self.ink = ink; self.audio = audio
     }
 }
+public extension Array where Element == InkItem {
+    /// What Halo wrote in these steps, as text a model can read back: handwritten lines, formulas and code.
+    var written: [String] {
+        compactMap { item in
+            switch item.type {
+            case "text": return item.value.flatMap { $0.isEmpty ? nil : $0 }
+            case "image": return item.alt      // "$…$" for a formula, a fenced block for code (set by the server)
+            default: return nil
+            }
+        }
+    }
+}
+
 public struct ConversationTurn: Codable, Equatable, Sendable {
     public var role: String
     public var text: String
@@ -171,6 +191,8 @@ public struct StudySession: Codable, Equatable, Identifiable, Sendable {
     public var region: PageRegion?
     public var lasso: [LassoPoint]?
     public var followUpLassos: [[LassoPoint]] = []
+    /// The latest circle hasn't been asked about yet (it moved here from a new circle while the note was open).
+    public var circlePending: Bool?
     public var mode = "answer"
     public var title: String
     public var draft = ""
@@ -181,6 +203,10 @@ public struct StudySession: Codable, Equatable, Identifiable, Sendable {
     public var createdAt = Date()
     /// "check" when Halo opened this note itself, after spotting a mistake in the student's working.
     public var origin: String?
+    /// What the checker read when it opened this note; "Why am I stuck?" starts from it.
+    public var check: CheckVerdict?
+    /// What the deep agent found behind the mistake, once the student has asked.
+    public var stuck: StuckDiagnosis?
     public init(number: Int, pageIndex: Int, region: PageRegion?, lasso: [LassoPoint]? = nil) {
         self.number = number; self.pageIndex = pageIndex; self.region = region; self.lasso = lasso
         self.title = region == nil ? "Whole-page question" : "New section"
@@ -371,6 +397,73 @@ public struct CheckVerdict: Codable, Equatable, Sendable {
     public var lines: [CheckLine]?
     public func text(ofLine n: Int?) -> String { lines?.first { $0.n == n }?.text ?? "" }
 }
+/// An anonymous ID for this device, made on first use and kept in the Keychain (so it survives reinstalls).
+/// Halo's memory of the learner is filed under it. There is no login: this is for the demo, not for real accounts.
+public enum DeviceID {
+    private static let service = "app.halo.device", account = "learner"
+    public static let current: String = load() ?? create()
+    private static func load() -> String? {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                    kSecAttrAccount as String: account, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+    private static func create() -> String {
+        let id = UUID().uuidString.lowercased()
+        let item: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account,
+                                   kSecValueData as String: Data(id.utf8), kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+        // If the Keychain refuses (some simulators), fall back to UserDefaults so the ID is still stable.
+        if SecItemAdd(item as CFDictionary, nil) != errSecSuccess {
+            if let saved = UserDefaults.standard.string(forKey: "halo.deviceID") { return saved }
+            UserDefaults.standard.set(id, forKey: "halo.deviceID")
+        }
+        return id
+    }
+}
+/// "Why am I stuck?": the checker's verdict plus the chapter, for the deep agent that looks for the missing idea.
+public struct StuckRequest: Encodable, Sendable {
+    public struct Line: Encodable, Sendable { public var n: Int; public var source: String; public var text: String }
+    public var problem: String
+    public var lines: [Line]
+    public var line: Int
+    public var concept: String
+    public var hint: String
+    public var title: String
+    public var chapter: String?
+    public var pages: [DigestPage]
+    public var learner: LearnerProfile?
+    /// Which learner's memory to use: this device's anonymous ID.
+    public var learnerId = DeviceID.current
+    public init(verdict: CheckVerdict, hint: String, title: String, chapter: String?, pages: [DigestPage], learner: LearnerProfile?) {
+        problem = verdict.problem ?? ""; line = verdict.line ?? 0; concept = verdict.concept ?? ""
+        lines = (verdict.lines ?? []).map { Line(n: $0.n, source: $0.source, text: $0.text) }
+        self.hint = String(hint.prefix(240)); self.title = title; self.chapter = chapter; self.pages = pages
+        self.learner = learner.flatMap { $0.isEmpty && $0.struggles.isEmpty ? nil : $0 }
+    }
+}
+/// One item of the plan the agent wrote for itself; the note shows the list ticking off while it works.
+public struct AgentTodo: Codable, Equatable, Sendable {
+    public var content: String
+    public var status: String
+    public init(content: String, status: String) { self.content = content; self.status = status }
+}
+/// The idea behind a mistake, and where the student's own book teaches it.
+public struct StuckDiagnosis: Codable, Equatable, Sendable {
+    public var gap: String
+    public var why: String
+    /// 1-based page of the book, 0 when the book does not cover it.
+    public var page: Int
+    public var quote: String
+    public var seenBefore: Bool
+    public var question: String
+}
+/// Progress from a deep agent run (/api/stuck).
+public enum AgentEvent: Equatable, Sendable {
+    case todos([AgentTodo])
+    case stage(String)
+    case diagnosis(StuckDiagnosis)
+}
 public struct CheckRequest: Encodable, Sendable {
     public var image: String
     public var imageMime = "image/jpeg"
@@ -378,6 +471,8 @@ public struct CheckRequest: Encodable, Sendable {
     public var pageTitle: String
     public var pageUrl: String
     public var learner: LearnerProfile?
+    /// Practice results are remembered per device (anonymous; see DeviceID).
+    public var learnerId = DeviceID.current
     public init(image: String, pageText: String, title: String, documentID: UUID, page: Int, learner: LearnerProfile? = nil) {
         self.image = image; self.pageText = String(pageText.prefix(3000))
         self.pageTitle = "\(title) · Page \(page + 1)"
@@ -457,6 +552,8 @@ public struct DiveAnswer: Codable, Equatable, Sendable {
     public var audio: String?
     public var sources: [DiveSource]
     public var searches: [String]
+    /// Questions worth asking next, one step deeper. Absent from older servers.
+    public var next: [String]?
 }
 public struct DiveVideo: Codable, Equatable, Identifiable, Sendable {
     public var id: String
@@ -529,4 +626,80 @@ public struct LessonWeb: Codable, Equatable, Sendable { public var heading: Stri
 public struct LessonMaterial: Codable, Equatable, Sendable {
     public var n: Int; public var anchor: LessonAnchor; public var headline: String; public var status: String
     public var visual: LessonVisual?; public var example: LessonExample?; public var web: LessonWeb?; public var images: [DiveImage]
+}
+
+// MARK: Quiz me on my notes
+/// The notes a quiz (or a question) is written from: the student's own words, plus Halo's enhanced version when there is one.
+public struct NotesPayload: Encodable, Equatable, Sendable {
+    public var title: String
+    public var text: String
+    public init(title: String, text: String) { self.title = String(title.prefix(80)); self.text = String(text.prefix(12000)) }
+}
+public struct QuizRequest: Encodable, Sendable {
+    public var notes: [NotesPayload]
+    public var document: String
+    /// The handwritten part of a single note, as a base64 JPEG.
+    public var image: String?
+    public var learner: LearnerProfile?
+    public init(notes: [NotesPayload], document: String, image: String? = nil, learner: LearnerProfile? = nil) {
+        self.notes = notes; self.document = document; self.image = image
+        self.learner = learner.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+public struct Quiz: Codable, Equatable, Sendable {
+    public var title: String
+    public var questions: [QuizQuestion]
+    public init(title: String, questions: [QuizQuestion]) { self.title = title; self.questions = questions }
+}
+public struct QuizQuestion: Codable, Equatable, Identifiable, Sendable {
+    public var id = UUID()
+    /// "choice" (marked on the iPad) or "short" (marked by the server).
+    public var kind: String
+    public var ask: String
+    public var options: [String]
+    /// The right option, for a choice question.
+    public var answer: Int
+    /// What a right short answer contains.
+    public var expected: String
+    public var explain: String
+    /// The line of the student's notes this question tests.
+    public var source: String
+    /// The question spoken (base64 mp3), when the server has a voice.
+    public var audio: String?
+    public var isChoice: Bool { kind == "choice" && options.indices.contains(answer) }
+    enum CodingKeys: String, CodingKey { case kind, ask, options, answer, expected, explain, source, audio }
+    public init(kind: String, ask: String, options: [String] = [], answer: Int = 0, expected: String = "", explain: String, source: String, audio: String? = nil) {
+        self.kind = kind; self.ask = ask; self.options = options; self.answer = answer; self.expected = expected
+        self.explain = explain; self.source = source; self.audio = audio
+    }
+}
+public struct QuizGradeRequest: Encodable, Sendable {
+    public var ask: String
+    public var expected: String
+    public var source: String
+    public var answer: String
+    public init(question: QuizQuestion, answer: String) {
+        ask = question.ask; expected = question.expected; source = question.source; self.answer = String(answer.prefix(600))
+    }
+}
+public struct QuizGrade: Decodable, Equatable, Sendable {
+    /// "right", "almost" or "wrong".
+    public var verdict: String
+    public var say: String
+    public var audio: String?
+    public init(verdict: String, say: String, audio: String? = nil) { self.verdict = verdict; self.say = say; self.audio = audio }
+}
+public struct NotesQuestion: Encodable, Sendable {
+    public var question: String
+    public var notes: [NotesPayload]
+    public var document: String
+    public var learner: LearnerProfile?
+    public init(question: String, notes: [NotesPayload], document: String, learner: LearnerProfile? = nil) {
+        self.question = String(question.prefix(300)); self.notes = notes; self.document = document
+        self.learner = learner.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+public struct NotesAnswer: Decodable, Equatable, Sendable {
+    public var say: String
+    public var audio: String?
 }

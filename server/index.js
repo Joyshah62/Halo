@@ -1,21 +1,44 @@
 import "dotenv/config";
+import { installProcessLogging, requestLogging, log, errorDetails } from "./logging.js";
 import express from "express";
 import cors from "cors";
+import { eventStream } from "./sse.js";
+import { convertOffice, ImportError } from "./documents.js";
 import { buildUserText, buildSystemPrompt, normalizeConversation, DIGEST_SYSTEM, buildDigestText, RECAP_SYSTEM, buildRecapText, ENHANCE_SYSTEM, buildEnhanceText, REFINE_SYSTEM, buildRefineText } from "./prompt.js";
 import { streamText, generateImage, generateJSON, PROVIDER, MODEL } from "./llm.js";
 import { speak, ttsEnabled, ttsVoice } from "./tts.js";
 import * as db from "./db.js";
 import { checkWork } from "./tutor.js";
+import { whyStuck } from "./stuck.js";
+import { learnerKey, recordTopics } from "./learner-memory.js";
 import * as web from "./web.js";
 import { cleanStep, despeak, prepareStep } from "./steps.js";
 import { startLesson, continueLesson } from "./lesson.js";
+import { installNotesQuiz } from "./notes-quiz.js";
 
 const PORT = Number(process.env.PORT || 8787);
+installProcessLogging();
 const app = express();
 app.use(cors());
+app.use(requestLogging);
 app.use(express.json({ limit: "25mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, provider: PROVIDER, model: MODEL, tts: ttsEnabled, voice: ttsEnabled ? ttsVoice : null }));
+// Raw bytes avoid base64 overhead. Files and conversion profiles are removed after each request.
+app.post("/api/documents/convert", express.raw({ type: "application/octet-stream", limit: "25mb" }), async (req, res) => {
+  try {
+    const pdf = await convertOffice(req.body, req.query.extension);
+    res.set({ "Content-Type": "application/pdf", "Cache-Control": "no-store" }).send(pdf);
+  } catch (error) {
+    res.status(error instanceof ImportError ? error.status : 500).json({ error: error instanceof ImportError ? error.message : "The document could not be imported. Please try again." });
+  }
+});
+
+app.use("/api/documents/convert", (error, _req, res, next) => {
+  if (error.type === "entity.too.large") return res.status(413).json({ error: "Choose a document smaller than 25 MB." });
+  next(error);
+});
+
 app.get("/api/history", (_req, res) => res.json(db.history()));
 app.get("/api/confusion", (_req, res) => res.json(db.confusionMap()));
 app.get("/api/flashcards", (_req, res) => res.json(db.flashcards()));
@@ -28,22 +51,27 @@ app.delete("/api/history", (_req, res) => { db.clearAll(); res.json({ ok: true }
 //         pageTitle, pageUrl, tutorMode, previousAnswer, parentId }
 app.post("/api/ask", async (req, res) => {
   const b = req.body ?? {};
+  const started = Date.now();
+  const trace = (stage, details = {}) => {
+    res.locals.stage = stage;
+    log(stage, { request: res.locals.requestID, question: res.locals.questionID, ms: Date.now() - started, ...details });
+  };
   if (typeof b.question !== "string" || !b.question.trim()) return res.status(400).json({ error: "question required" });
 
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no",
-  });
-  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  const stream = eventStream(res, { onHeartbeat: () => log("ask.waiting", {
+    request: res.locals.requestID, question: res.locals.questionID, stage: res.locals.stage, ms: Date.now() - started,
+  }) });
+  const send = (event, data) => stream.send(event, data);
 
   const qid = db.logQuestion({
     url: b.pageUrl, title: b.pageTitle, question: b.question,
     mode: b.tutorMode ? "hint" : "answer", parentId: b.parentId,
   });
+  res.locals.questionID = qid;
+  trace("ask.started", { provider: PROVIDER, model: MODEL, image: Boolean(b.image), contextImage: Boolean(b.contextImage) });
   send("start", { id: qid });
 
+  try {
   const images = [];
   if (b.contextImage) images.push({ mime: "image/jpeg", data: b.contextImage, label: "Screenshot of the whole visible page (for context):" });
   if (b.image) images.push({ mime: b.imageMime || "image/png", data: b.image, label: "Close-up of the rectangular section the student selected:" });
@@ -68,20 +96,20 @@ app.post("/api/ask", async (req, res) => {
   const ttsJobs = [];       // promises in step order
   let emitted = 0;
   let buffer = "";
-  let closed = false;
-  res.on("close", () => { closed = true; });
-
   // Emit steps strictly in order, each once its audio is ready.
   async function flush() {
     while (emitted < ttsJobs.length) {
       const audio = await ttsJobs[emitted];
-      if (closed) return;
+      if (stream.closed) return;
       send("step", { index: emitted, ...steps[emitted], audio });
       emitted++;
+      trace("ask.step.sent", { index: emitted - 1, audio: Boolean(audio) });
     }
   }
-  let flushing = Promise.resolve();
-  const queueFlush = () => (flushing = flushing.then(flush));
+  let flushing = Promise.resolve(), preparationError;
+  const queueFlush = () => {
+    flushing = flushing.then(flush).catch((error) => { preparationError = error; });
+  };
 
   function handleLine(line) {
     line = line.trim().replace(/^```[a-z]*$|^```$/i, "");
@@ -101,7 +129,10 @@ app.post("/api/ask", async (req, res) => {
     const step = cleanStep(obj);
     if (!step) return;
     steps.push(step);
-    ttsJobs.push(prepareStep(step, steps.slice(0, -1).map((x) => x.say).join(" ")));
+    trace("ask.media.started", { index: steps.length - 1 });
+    ttsJobs.push(prepareStep(step, steps.slice(0, -1).map((x) => x.say).join(" ")).catch((error) => {
+      log("ask.media.error", { request: res.locals.requestID, ...errorDetails(error) }, "warn"); return null;
+    }));
     queueFlush();
   }
 
@@ -128,10 +159,11 @@ app.post("/api/ask", async (req, res) => {
     send("done", { id: qid, steps: steps.length, ms: Date.now() - t0 });
     return res.end();
   }
-  try {
+    trace("ask.provider.started");
     let fullText = "";
     for await (const delta of streamText({ images, text: userText, system, conversation: normalizeConversation(b.conversation) })) {
-      if (closed) break;
+      if (stream.closed) break;
+      if (!fullText) trace("ask.provider.first_delta");
       fullText += delta;
       buffer += delta;
       let nl;
@@ -140,8 +172,11 @@ app.post("/api/ask", async (req, res) => {
         buffer = buffer.slice(nl + 1);
       }
     }
+    trace("ask.provider.finished", { characters: fullText.length, steps: steps.length });
     if (buffer.trim()) handleLine(buffer);
     await flushing;
+    if (preparationError) throw preparationError;
+    if (stream.closed) return;
     if (!meta) { meta = { mode: b.tutorMode ? "hint" : "answer", topic: "" }; send("meta", meta); }
     if (steps.length === 0) {
       // Fallback: plain text next to the circle
@@ -156,10 +191,12 @@ app.post("/api/ask", async (req, res) => {
       answerText: steps.map((s) => s.say).join(" "),
     });
     send("done", { id: qid, steps: steps.length, ms: Date.now() - t0 });
+    trace("ask.completed", { steps: steps.length });
     console.log(`[ask] #${qid} ${meta.mode} "${meta.topic}" ${steps.length} steps in ${Date.now() - t0}ms — ${b.question}`);
   } catch (e) {
+    log("ask.error", { request: res.locals.requestID, question: res.locals.questionID, stage: res.locals.stage, ...errorDetails(e) }, "error");
     console.error("[ask] error", e);
-    if (!closed) send("error", { message: e.message || String(e) });
+    if (!stream.closed) send("error", { message: e.message || String(e) });
   } finally {
     res.end();
   }
@@ -167,17 +204,16 @@ app.post("/api/ask", async (req, res) => {
 
 // POST /api/check → text/event-stream. "Halo watches you work": the student paused while solving by hand.
 // body: { image (base64 of the working, with the printed problem if it fits), imageMime, problem, pageText,
-//         pageTitle, pageUrl, learner }
+//         pageTitle, pageUrl, learner, learnerId (a correct or wrong result is recorded as practice on that topic) }
 // events: start {} → stage {name} … → verdict { status: correct|wrong|unsure|nothing, line, box {x,y,w,h in 0-1 of
 //         the image}, kind, concept, topic, lines, checks } → meta + step (same shape as /api/ask; only when wrong) → done
+const practising = new Map();   // learner → the problem they were last checked on
 app.post("/api/check", async (req, res) => {
   const b = req.body ?? {};
   if (typeof b.image !== "string" || !b.image) return res.status(400).json({ error: "image required" });
 
-  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-  let closed = false;
-  res.on("close", () => { closed = true; });
-  const send = (event, data) => { if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+  const stream = eventStream(res);
+  const send = (event, data) => stream.send(event, data);
   const t0 = Date.now();
   send("start", {});
   try {
@@ -193,6 +229,14 @@ app.post("/api/check", async (req, res) => {
       db.finishQuestion(qid, { topic: verdict.topic, circledText: (verdict.lines.find((l) => l.n === verdict.line)?.text || "").slice(0, 500), answerText: steps.map((s) => s.say).join(" ") });
     }
     send("verdict", { id: qid, ...verdict });
+    // Solved or slipped, it was practice on this topic: it goes into what the learner has covered.
+    if ((verdict.status === "correct" || verdict.status === "wrong") && verdict.topic) {
+      const page = Number(String(b.pageUrl || "").match(/\/page\/(\d+)/)?.[1]) || 0;
+      // Halo checks after every pause, so one problem counts once; later checks of it only update the result.
+      const who = learnerKey(b.learnerId), again = practising.get(who) === verdict.problem;
+      practising.set(who, verdict.problem);
+      recordTopics(who, [{ topic: verdict.topic, how: "practice", result: verdict.status === "correct" ? "solved it" : "made a mistake", book: String(b.pageTitle || "").split(" · ")[0], page, again }]);
+    }
     if (steps.length) {
       send("meta", { mode: "hint", topic: verdict.topic });
       let said = "";
@@ -207,6 +251,52 @@ app.post("/api/check", async (req, res) => {
     console.log(`[check] ${verdict.status} "${verdict.topic || ""}" ${verdict.lines.length} lines, ${verdict.checks.map((c) => c.result).join(",") || "no checks"} in ${Date.now() - t0}ms${flagged}`);
   } catch (e) {
     console.error("[check] error", e);
+    send("error", { message: e.message || String(e) });
+  } finally {
+    res.end();
+  }
+});
+
+// POST /api/stuck → text/event-stream. "Why am I stuck?": after a caught mistake, a deep agent (stuck.js) finds the idea
+// the student is missing and the page of their own book that teaches it, and remembers the gap for next time.
+// body: { problem, lines: [{ n, source, text }], line, concept, hint, title, chapter, pages: [{ page, text }], learner,
+//         learnerId (the iPad's anonymous device ID; memory is kept per ID, in Backboard when BACKBOARD_API_KEY is set) }
+//         (problem, lines, line and concept are the /api/check verdict's; pages is the chapter or book, as for a lesson)
+// events: start {} → todos { todos: [{ content, status }] } (the agent's own plan, as it changes) and stage { name, say, page? }
+//         (what it is doing right now) → diagnosis { gap, why, page, quote, seenBefore, question }
+//         → meta + step (same shape as /api/ask; the step that sends them to the book carries a `point` with `page`) → done
+app.post("/api/stuck", async (req, res) => {
+  const b = req.body ?? {};
+  const pages = (Array.isArray(b.pages) ? b.pages : []).slice(0, 400).map((p) => ({ page: Number(p?.page) || 0, text: String(p?.text || "").slice(0, 6000) })).filter((p) => p.page > 0 && p.text.trim());
+  const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 24).map((l) => ({ n: Number(l?.n) || 0, source: l?.source === "printed" ? "printed" : "handwritten", text: String(l?.text || "").slice(0, 160) }));
+  if (!lines.length && !(typeof b.problem === "string" && b.problem.trim())) return res.status(400).json({ error: "problem or lines required" });
+
+  const stream = eventStream(res);
+  const send = (event, data) => stream.send(event, data);
+  const t0 = Date.now();
+  send("start", {});
+  try {
+    const { steps: raw, ...diagnosis } = await whyStuck(
+      { problem: String(b.problem || "").slice(0, 300), lines, line: Number(b.line) || 0, concept: String(b.concept || "").slice(0, 80), hint: String(b.hint || "").slice(0, 240),
+        title: String(b.title || "").slice(0, 120), chapter: String(b.chapter || "").slice(0, 120), pages, learner: b.learner,
+        learnerId: typeof b.learnerId === "string" ? b.learnerId.slice(0, 64) : "" },
+      (event, data) => send(event, { ...data, ms: Date.now() - t0 }),
+    );
+    send("diagnosis", diagnosis);
+    const steps = raw.map(cleanStep).filter(Boolean);
+    if (steps.length) {
+      send("meta", { mode: "hint", topic: diagnosis.gap });
+      let said = "";
+      for (const [index, step] of steps.entries()) {
+        const audio = await prepareStep(step, said);
+        send("step", { index, ...step, audio });
+        said += ` ${step.say}`;
+      }
+    }
+    send("done", { steps: steps.length, ms: Date.now() - t0 });
+    console.log(`[stuck] "${diagnosis.gap}" → p.${diagnosis.page || "?"}${diagnosis.seenBefore ? " (seen before)" : ""}, ${pages.length} pages searched in ${Date.now() - t0}ms`);
+  } catch (e) {
+    console.error("[stuck] error", e);
     send("error", { message: e.message || String(e) });
   } finally {
     res.end();
@@ -375,6 +465,8 @@ app.post("/api/notes/refine", async (req, res) => {
   }
 });
 
+// Quiz me on my notes, mark a short answer, ask about my notes (notes-quiz.js).
+installNotesQuiz(app);
 // POST /api/notes/image → { image: { mime, data (base64) } | null }: one diagram for a section of enhanced notes.
 app.post("/api/notes/image", async (req, res) => {
   const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim().slice(0, 300) : "";
@@ -389,7 +481,7 @@ const webRoute = (name, run) => async (req, res) => {
 };
 // POST /api/dive/plan { question, context?, document?, learner? } → { title, say, web, video, wiki, image }
 app.post("/api/dive/plan", webRoute("plan", (b) => web.plan(b)));
-// POST /api/dive/answer { question, topic?, context?, learner? } → { sections: [{ heading, text, cites: [n] }], takeaway, say, audio, sources: [{ title, url, site }], searches }
+// POST /api/dive/answer { question, topic?, context?, learner? } → { sections: [{ heading, text, cites: [n] }], takeaway, say, next: [question], audio, sources: [{ title, url, site }], searches }
 app.post("/api/dive/answer", webRoute("answer", (b) => web.answer(b)));
 // POST /api/dive/videos { query } → { videos: [{ id, title, channel, length, views }] }
 app.post("/api/dive/videos", webRoute("videos", async (b) => ({ videos: await web.videos(b.query) })));
@@ -422,15 +514,14 @@ app.post("/api/speak", webRoute("speak", async (b) => ({ audio: typeof b.text ==
 //   done { id, waiting }      waiting = true while the lesson is paused on a question
 const lessonRoute = (run) => async (req, res) => {
   const b = req.body ?? {};
-  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-  let closed = false;
-  res.on("close", () => { closed = true; });
-  const send = (event, data) => { if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+  const stream = eventStream(res);
+  const send = (event, data) => stream.send(event, data);
   const t0 = Date.now();
   try {
     const out = await run(b, send, () => closed);
     send("done", { ...out, ms: Date.now() - t0 });
   } catch (e) {
+    log("lesson.error", { request: res.locals.requestID, ...errorDetails(e) }, "error");
     console.error("[lesson] error", e);
     send("error", { message: e.message || String(e) });
   } finally { res.end(); }
@@ -439,7 +530,8 @@ const lessonRoute = (run) => async (req, res) => {
 app.post("/api/lesson/start", lessonRoute((b, send) => {
   const pages = (Array.isArray(b.pages) ? b.pages : []).map((p) => ({ page: Number(p?.page), text: String(p?.text || "").slice(0, 12000) }));
   if (!pages.length) throw new Error("pages required");
-  return startLesson({ title: String(b.title || "").slice(0, 120), chapter: String(b.chapter || "").slice(0, 120), pages, learner: b.learner }, send);
+  return startLesson({ title: String(b.title || "").slice(0, 120), chapter: String(b.chapter || "").slice(0, 120), pages, learner: b.learner,
+        learnerId: typeof b.learnerId === "string" ? b.learnerId.slice(0, 64) : "" }, send);
 }));
 // POST /api/lesson/answer { id, answer, action: "answer" | "skip" | "jump", concept }
 app.post("/api/lesson/answer", lessonRoute((b, send) => {
@@ -460,7 +552,17 @@ function mockEnhanced(text, title) {
   };
 }
 
-app.listen(PORT, () => {
+app.use((error, req, res, _next) => {
+  log("request.error", { request: res.locals.requestID, path: req.path, ...errorDetails(error) }, "error");
+  if (res.headersSent) {
+    if (!res.writableEnded && !res.destroyed) res.end(`event: error\ndata: ${JSON.stringify({ message: "The server couldn’t finish this answer. Please retry." })}\n\n`);
+    return;
+  }
+  res.status(error.status || 500).json({ error: "The request could not be completed. Check the server log for its request ID." });
+});
+
+const httpServer = app.listen(PORT, () => {
+  log("server.listening", { port: PORT, provider: PROVIDER, model: MODEL });
   // Library voices can take several seconds on first use; warm it so the first real answer isn't the slow one.
   if (ttsEnabled) { const t = Date.now(); speak("Hi.").then((a) => console.log(`[tts] voice warmed in ${Date.now() - t}ms${a ? "" : " (failed)"}`)); }
   console.log(`Halo server on http://localhost:${PORT}  ${PROVIDER}/${MODEL}  tts=${ttsEnabled ? "elevenlabs" : "off (browser fallback)"}`);

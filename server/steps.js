@@ -2,8 +2,9 @@
 // cleaning what the model produced, making it safe to speak, and attaching voice and pictures in order.
 import { generateImage } from "./llm.js";
 import { speak } from "./tts.js";
+import { typeset } from "./notation.js";
 
-const INK_TYPES = new Set(["text", "arrow", "underline", "box", "check", "cross", "sketch", "image", "point"]);
+const INK_TYPES = new Set(["text", "arrow", "underline", "box", "check", "cross", "sketch", "image", "point", "math", "code"]);
 const POINT_STYLES = new Set(["highlight", "underline", "circle"]);
 
 /** One raw model object → a clean step, or null when it isn't one. */
@@ -13,8 +14,9 @@ export function cleanStep(obj) {
     ? obj.ink.filter((i) => i && INK_TYPES.has(i.type)).filter((i) => i.type !== "point" || typeof i.quote === "string" || Number.isInteger(i.line)).slice(0, 5).map((i) => {
         if (i.type === "point") {
           // A mark on the printed page: found by its exact text (asks) or by a line of the checked working (checks).
+          // `page` is set when the text is on another page of the book ("why am I stuck?" sends them there).
           const style = POINT_STYLES.has(i.style) ? i.style : "highlight";
-          return Number.isInteger(i.line) ? { type: "point", line: i.line, style } : { type: "point", quote: String(i.quote).trim().slice(0, 60), style };
+          return Number.isInteger(i.line) ? { type: "point", line: i.line, style } : { type: "point", quote: String(i.quote).trim().slice(0, 60), style, ...(Number.isInteger(i.page) && i.page > 0 ? { page: i.page } : {}) };
         }
         if (i.type === "sketch") {
           return {
@@ -27,6 +29,8 @@ export function cleanStep(obj) {
           };
         }
         if (i.type === "image") return { type: "image", prompt: String(i.prompt || "").slice(0, 300) };
+        // Formulas and code are typeset here into a picture (with its natural size), so every client can show them.
+        if (i.type === "math" || i.type === "code") return typeset(i);
         return i;
       })
     : [];
@@ -47,7 +51,8 @@ export function despeak(t) {
 export async function prepareStep(step, previous) {
   const [audio] = await Promise.all([
     speak(step.say, { previous }),
-    ...step.ink.filter((i) => i.type === "image").map(async (i) => {
+    // Generated illustrations only: typeset formulas and code arrive with their picture already.
+    ...step.ink.filter((i) => i.type === "image" && !i.data && i.prompt).map(async (i) => {
       const img = await generateImage(i.prompt);
       if (img) { i.mime = img.mime; i.data = img.data; }
     }),
