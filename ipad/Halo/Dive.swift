@@ -101,7 +101,7 @@ struct DiveBoard: View {
                                 Circle().fill(here ? HaloStyle.coral : Color.white).frame(width: 13, height: 13)
                                     .overlay(Circle().stroke(HaloStyle.coral.opacity(ahead ? 0.45 : 1), lineWidth: 2.5))
                                 Text(item.plan?.title ?? item.question).font(HaloKit.hand(here ? 24 : 22))
-                                    .foregroundStyle(here ? HaloStyle.text : HaloStyle.ink.opacity(ahead ? 0.55 : 1)).lineLimit(1).frame(maxWidth: 260, alignment: .leading).fixedSize()
+                                    .foregroundStyle(here ? HaloStyle.text : HaloStyle.ink.opacity(ahead ? 0.55 : 1)).lineLimit(1).frame(maxWidth: here ? 460 : 220, alignment: .leading).fixedSize()
                             }.contentShape(Rectangle())
                         }
                         .buttonStyle(.plain).allowsHitTesting(!here).id(item.id)
@@ -480,7 +480,8 @@ struct DiveBoard: View {
         guard let answer = dive.answer else { return [] }
         var list = (answer.next ?? []).filter { !$0.isEmpty }
         if list.isEmpty { list = answer.sections.prefix(2).map { "More on “\($0.heading)”" } }
-        return list + ["Explain it more simply", "Give me a real-world example"]
+        // Halo's three questions on their own (the stock ones only fill in when it has fewer): they wrap rather than scroll, and three fit in two lines on a 10.5-inch iPad.
+        return Array((list + ["Explain it more simply", "Give me a real-world example"]).prefix(max(3, min(list.count, 4))))
     }
     private var showIdeas: Bool { ideasOpen && !ideas.isEmpty && typed.isEmpty && !store.diveListening && !dive.playing }
     /// Halo is busy with this bar: hearing a question, or still putting the answer together.
@@ -490,21 +491,21 @@ struct DiveBoard: View {
     private var dock: some View {
         VStack(alignment: .leading, spacing: 10) {
             if showIdeas {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Array(ideas.enumerated()), id: \.element) { index, idea in
-                            Button { go(idea) } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "arrow.turn.down.right").font(.system(size: 11, weight: .bold)).foregroundStyle(HaloStyle.coral)
-                                    Text(idea).font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink).lineLimit(1)
-                                }
-                                .padding(.horizontal, 14).padding(.vertical, 6)
-                                .background(Color.white, in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12)))
-                                .shadow(color: .black.opacity(0.1), radius: 7, y: 3)
-                            }.buttonStyle(.plain).arrives(index)
-                        }
-                    }.padding(.leading, 78).padding(.trailing, 4).padding(.vertical, 6)
+                // Wrapped onto as many lines as they need, so every question can be read whole on a 10.5-inch iPad.
+                FlowRow(spacing: 8) {
+                    ForEach(Array(ideas.enumerated()), id: \.element) { index, idea in
+                        Button { go(idea) } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.turn.down.right").font(.system(size: 11, weight: .bold)).foregroundStyle(HaloStyle.coral)
+                                Text(idea).font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink).lineLimit(2).multilineTextAlignment(.leading)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background(Color.white, in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12)))
+                            .shadow(color: .black.opacity(0.1), radius: 7, y: 3)
+                        }.buttonStyle(.plain).arrives(index)
+                    }
                 }
+                .padding(.vertical, 4).frame(maxWidth: .infinity, alignment: .leading)
                 .id(dive.id)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -525,42 +526,21 @@ struct DiveBoard: View {
         .padding(.horizontal, 20).padding(.top, 30).padding(.bottom, 12)
         // The board fades out under the dock instead of being cut off by it.
         .background {
-            LinearGradient(stops: [.init(color: HaloStyle.paper.opacity(0), location: 0), .init(color: HaloStyle.paper.opacity(0.93), location: 0.24), .init(color: HaloStyle.paper, location: 1)], startPoint: .top, endPoint: .bottom)
+            LinearGradient(stops: [.init(color: HaloStyle.paper.opacity(0), location: 0), .init(color: HaloStyle.paper.opacity(0.95), location: 0.14), .init(color: HaloStyle.paper, location: 0.3), .init(color: HaloStyle.paper, location: 1)], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea().allowsHitTesting(false)
         }
         .animation(.spring(duration: 0.4, bounce: 0.18), value: showIdeas)
         .animation(.spring(duration: 0.3), value: typed.isEmpty)
     }
     private var bar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: store.diveListening ? "waveform" : "arrow.turn.down.right").font(.system(size: 16, weight: .semibold)).foregroundStyle(HaloStyle.coral)
-                .symbolEffect(.variableColor.iterative, isActive: store.diveListening).contentTransition(.symbolEffect(.replace)).frame(width: 22)
-            if store.diveListening {
-                // What Halo has heard so far; a pause sends it.
-                Text(store.diveHeard.isEmpty ? "I’m listening. Ask away…" : store.diveHeard).font(HaloKit.text(17))
-                    .foregroundStyle(HaloStyle.text.opacity(store.diveHeard.isEmpty ? 0.45 : 1)).lineLimit(1).truncationMode(.head)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                TextField(dive.answer == nil ? "Ask something else while Halo looks…" : "Go deeper. What do you want to know next?", text: $followUp)
-                    .font(HaloKit.text(17)).textFieldStyle(.plain).submitLabel(.search).focused($asking).onSubmit(send)
+        VStack(alignment: .leading, spacing: 6) {
+            if store.diveListening, !store.diveHeard.isEmpty {
+                Text(store.diveHeard).font(HaloKit.text(17))
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            if typed.isEmpty || store.diveListening {
-                Button { asking = false; store.listenForDive() } label: {
-                    Image(systemName: store.diveListening ? "stop.fill" : "mic.fill").font(.system(size: 16, weight: .semibold)).frame(width: 42, height: 42)
-                        .background(HaloStyle.coral, in: Circle()).foregroundStyle(.white)
-                        .background { if store.diveListening { MicPulse(meter: store.speech.meter) } }
-                }.buttonStyle(.plain).accessibilityLabel(store.diveListening ? "Stop listening" : "Ask out loud").transition(.scale.combined(with: .opacity))
-            } else {
-                Button(action: send) {
-                    Image(systemName: "arrow.down").font(.system(size: 16, weight: .bold)).frame(width: 42, height: 42)
-                        .background(HaloStyle.coral, in: Circle()).foregroundStyle(.white)
-                }.buttonStyle(.plain).accessibilityLabel("Go deeper").transition(.scale.combined(with: .opacity))
-            }
+            HaloComposer(text: $followUp, recording: store.diveListening,
+                         microphone: { store.listenForDive() }, focus: $asking, send: send)
         }
-        .padding(.leading, 18).padding(.trailing, 7).frame(height: 56)
-        .background(Color.white, in: Capsule())
-        .overlay { HaloEdge(alive: alive, focused: asking).allowsHitTesting(false) }
-        .shadow(color: alive ? HaloStyle.coral.opacity(0.22) : .black.opacity(0.14), radius: 18, y: 8)
     }
     private func send() { if !typed.isEmpty { go(typed) } }
     /// One level down, from wherever it was asked: the bar, an idea, a part of the answer, a picture.

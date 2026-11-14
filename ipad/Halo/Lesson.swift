@@ -195,12 +195,21 @@ final class LessonCoach: ObservableObject {
         }
         consume(client.answerLesson(pending, server: server))
     }
+    // Same rules as the server's list (lesson.js): short, no trailing "…", nothing that sounds like right or wrong.
     private static let localFillers = [
-        LessonFiller(kind: "guess", say: "Okay… hold that thought."), LessonFiller(kind: "guess", say: "Interesting. Let's see."),
-        LessonFiller(kind: "answer", say: "Mm, okay…"), LessonFiller(kind: "answer", say: "Hmm, let me think about that.")
+        LessonFiller(kind: "guess", say: "Ooh, interesting guess."), LessonFiller(kind: "guess", say: "Nice, let's find out."),
+        LessonFiller(kind: "guess", say: "Good instinct. Let's see."),
+        LessonFiller(kind: "answer", say: "Got it. Let's check."), LessonFiller(kind: "answer", say: "Alright, let's look at that."),
+        LessonFiller(kind: "answer", say: "Right, let's walk through it.")
     ]
+    private var lastFiller = ""
+    /// A different line from last time, so the same words never play twice in a row.
     private func filler(_ kind: String) -> LessonFiller? {
-        ((plan?.fillers ?? []).filter { $0.kind == kind }.randomElement()) ?? Self.localFillers.filter { $0.kind == kind }.randomElement()
+        let voiced = (plan?.fillers ?? []).filter { $0.kind == kind }
+        let pool = voiced.isEmpty ? Self.localFillers.filter { $0.kind == kind } : voiced
+        let pick = pool.filter { $0.say != lastFiller }.randomElement() ?? pool.randomElement()
+        if let pick { lastFiller = pick.say }
+        return pick
     }
     /// What a person says in the second after you answer them. The reply is already on its way while this plays.
     private func murmur(_ filler: LessonFiller) async {
@@ -397,6 +406,7 @@ struct LessonBoard: View {
     @State private var source = false
     @State private var showWeb = false
     @State private var introAt = Date()
+    @State private var paperWidth: CGFloat = 320
     @FocusState private var typing: Bool
     init(store: StudyStore) { self.store = store; coach = store.lesson; speech = store.lesson.speech }
 
@@ -407,16 +417,37 @@ struct LessonBoard: View {
         GeometryReader { geo in
             let wide = geo.size.width > 850
             let side: CGFloat = wide ? 30 : 16
-            VStack(spacing: 0) {
-                header.padding(.horizontal, side).padding(.top, 14).padding(.bottom, 12)
-                if coach.plan == nil { introduction }
-                else {
-                    journey(wide: wide).padding(.horizontal, side).padding(.bottom, 14)
-                    if let summary = coach.summary, coach.selected == 0 { completion(summary, wide: wide).padding(.horizontal, side) }
-                    else {
-                        stage(wide: wide).padding(.horizontal, side).padding(.bottom, 14)
-                        desk(wide: wide).padding(.horizontal, side).frame(maxWidth: .infinity, maxHeight: .infinity)
-                        dock.padding(.horizontal, side).padding(.top, 12).padding(.bottom, 10)
+            Group {
+                if coach.plan == nil {
+                    VStack(spacing: 0) {
+                        header.padding(.horizontal, side).padding(.vertical, 14)
+                        introduction
+                    }
+                } else {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 18) {
+                                header
+                                journey(wide: wide)
+                                if let summary = coach.summary, coach.selected == 0 {
+                                    completion(summary, wide: wide)
+                                } else {
+                                    stage(wide: wide)
+                                    desk(wide: wide)
+                                }
+                            }
+                            .padding(.horizontal, side).padding(.top, 14).padding(.bottom, 24)
+                        }
+                        .scrollDismissesKeyboard(.interactively)
+                        .onChange(of: coach.phase) { _, phase in
+                            if !onHook { withAnimation { proxy.scrollTo(phase, anchor: .top) } }
+                        }
+                    }
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if coach.selected != 0 {
+                            dock.padding(.horizontal, side).padding(.vertical, 10)
+                                .background(HaloStyle.paper.opacity(0.97))
+                        }
                     }
                 }
             }
@@ -440,9 +471,9 @@ struct LessonBoard: View {
             HaloRing(size: 38, working: coach.busy)
             VStack(alignment: .leading, spacing: 2) {
                 Eyebrow(store.demoMode ? "HALO · OFFLINE SAMPLE" : "HALO · YOUR CHAPTER, TOGETHER", color: HaloStyle.coral)
-                Text(coach.plan?.title ?? "A tutor. Your book. Your pace.").font(HaloKit.title(26)).lineLimit(1).minimumScaleFactor(0.7)
+                Text(coach.plan?.title ?? "A tutor. Your book. Your pace.").font(HaloKit.title(26)).fixedSize(horizontal: false, vertical: true)
                 if let thread = coach.plan?.thread, !thread.isEmpty {
-                    Text(thread).font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink).lineLimit(1).minimumScaleFactor(0.75)
+                    Text(thread).font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 8)
@@ -525,7 +556,7 @@ struct LessonBoard: View {
                         if wide || concept.n == coach.selected {
                             Text(concept.name).font(HaloKit.text(12.5, concept.n == coach.selected ? .semibold : .regular))
                                 .foregroundStyle(reached ? HaloStyle.text : HaloStyle.text.opacity(0.45))
-                                .multilineTextAlignment(.center).lineLimit(2).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
+                                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
                         }
                     }.frame(maxWidth: .infinity).contentShape(Rectangle())
                 }.buttonStyle(.plain).disabled(!reached)
@@ -553,7 +584,7 @@ struct LessonBoard: View {
                 if !coach.said.isEmpty, !viewingEarlier, coach.said != coach.guesses[coach.current] || coach.question == nil {
                     HStack(spacing: 8) {
                         if coach.interjection != nil { Text("Halo's wrapping up, then it's yours").font(HaloKit.text(12)).foregroundStyle(.secondary) }
-                        Text(coach.said).font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink).lineLimit(2)
+                        Text(coach.said).font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
                         Text("YOU").font(HaloKit.text(9.5, .bold)).tracking(1.2).foregroundStyle(HaloStyle.ink.opacity(0.6))
                     }
                     .padding(.horizontal, 14).padding(.vertical, 6)
@@ -572,7 +603,7 @@ struct LessonBoard: View {
         else if wide {
             HStack(alignment: .top, spacing: 20) {
                 exhibits(notes: false)
-                notepad.frame(width: 320)
+                notepad.frame(width: 320).fixedSize(horizontal: false, vertical: true)
             }
         } else { exhibits(notes: true) }
     }
@@ -581,25 +612,23 @@ struct LessonBoard: View {
         VStack(spacing: 16) {
             Spacer(minLength: 0)
             HaloRing(size: 92, symbol: "questionmark").breathing()
-            Text("What's your hunch?").font(HaloKit.title(42)).tracking(-1)
+            Text("What's your hunch?").font(HaloKit.title(42)).tracking(-1).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             Text("no wrong answers. a guess just tells me where to start").font(HaloKit.hand(26)).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center)
             if let concept = coach.plan?.concepts.first(where: { $0.n == coach.current }) {
                 ScribbleChip(text: "stop \(concept.n) of \(coach.plan?.concepts.count ?? 0) · about \(concept.minutes) min", icon: "mappin.and.ellipse").padding(.top, 4)
             }
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 300)
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
     private func exhibits(notes: Bool) -> some View {
         let n = coach.selected
         let material = coach.materials[n]
         let laid = viewingEarlier || coach.summary != nil ? LessonCoach.exhibits : coach.shown[n] ?? []
-        return ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+        return VStack(alignment: .leading, spacing: 18) {
                     if let guess = coach.guesses[n], !guess.isEmpty {
-                        Sticky(label: "Your hunch", tilt: -0.8) { Text(guess).font(HaloKit.hand(27)).foregroundStyle(HaloStyle.text).lineLimit(3) }
+                        Sticky(label: "Your hunch", tilt: -0.8) { Text(guess).font(HaloKit.hand(27)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true) }
                             .frame(maxWidth: 360, alignment: .leading).padding(.leading, 4).transition(.scale(scale: 0.8).combined(with: .opacity))
                     }
                     if let material {
@@ -614,12 +643,8 @@ struct LessonBoard: View {
                         HStack(spacing: 10) { HaloRing(size: 22, working: true); Text(coach.busy ? "Halo's working out where to start…" : "Nothing on the desk yet.").font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink) }
                             .padding(.vertical, 22).padding(.horizontal, 6)
                     }
-                    if notes { notepad.frame(height: 300) }
-                }.padding(.horizontal, 3).padding(.top, 10).padding(.bottom, 8)
-            }
-            .onChange(of: coach.phase) { _, phase in withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { proxy.scrollTo(phase, anchor: .top) } }
-            .onChange(of: coach.exampleMoves) { _, _ in withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { proxy.scrollTo("example", anchor: .bottom) } }
-        }
+                    if notes { notepad }
+        }.padding(.horizontal, 3).padding(.top, 10).padding(.bottom, 8)
     }
     /// The card Halo is talking about right now gets a coral edge.
     private func spotlight(_ kind: String) -> Bool { coach.busy && coach.phase == kind && coach.selected == coach.current }
@@ -647,7 +672,7 @@ struct LessonBoard: View {
                 }
                 if !material.headline.isEmpty { Text(material.headline).font(HaloKit.title(23)).fixedSize(horizontal: false, vertical: true) }
                 if !material.anchor.quote.isEmpty {
-                    Text("“\(material.anchor.quote)”").font(HaloKit.title(18)).lineSpacing(6).lineLimit(7)
+                    Text("“\(material.anchor.quote)”").font(HaloKit.title(18)).lineSpacing(6).fixedSize(horizontal: false, vertical: true)
                         .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 12).padding(.vertical, 9)
                         .background(HaloKit.highlight.opacity(0.7), in: RoundedRectangle(cornerRadius: 5))
                 }
@@ -767,9 +792,11 @@ struct LessonBoard: View {
                 if coach.board.messages.isEmpty {
                     Text("I'll jot things down here as we talk.").font(HaloKit.hand(23)).foregroundStyle(HaloStyle.text.opacity(0.35)).padding(.top, 6)
                 }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(height: max(180, InkLayout.height(of: coach.board) * max(1, paperWidth - 32) / InkLayout.width))
         }
         .padding(16)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paperWidth = $0 }
         .background(Color.white, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay(alignment: .leading) { Rectangle().fill(HaloStyle.coral.opacity(0.25)).frame(width: 1.5).padding(.leading, 9) }
         .shadow(color: .black.opacity(0.1), radius: 12, y: 6)
@@ -796,9 +823,7 @@ struct LessonBoard: View {
         }
     }
     private var prompt: String {
-        if speech.isRecording { return "Listening…" }
-        if !coach.waiting { return "Cut in with a question…" }
-        return coach.isHook ? "Take a guess…" : "Say it, type it, or ask me something…"
+        speech.isRecording ? "Listening…" : "Ask Halo or share your answer…"
     }
     @ViewBuilder private var dock: some View {
         if viewingEarlier {
@@ -822,19 +847,10 @@ struct LessonBoard: View {
                 if coach.showHint, let hint = coach.question?.hint, !hint.isEmpty {
                     Label(hint, systemImage: "lightbulb").font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink).transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
-                HStack(alignment: .center, spacing: 10) {
-                    MicButton(recording: speech.isRecording, level: { [speech] in CGFloat(speech.meter.value) }) { typing = false; coach.toggleMic() }
-                    TextField(prompt, text: $coach.draft, axis: .vertical)
-                        .focused($typing).font(HaloKit.text(17)).lineLimit(1...3).padding(.horizontal, 16).padding(.vertical, 13)
-                        .background(HaloStyle.paper, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(typing ? HaloStyle.ink.opacity(0.45) : HaloStyle.ink.opacity(0.12)))
-                        .onSubmit { coach.reply() }
-                    Button { coach.reply() } label: {
-                        Image(systemName: "arrow.up").font(.system(size: 17, weight: .bold)).frame(width: 46, height: 46).background(HaloStyle.ink, in: Circle()).foregroundStyle(.white)
-                    }.buttonStyle(.plain).disabled(coach.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).opacity(coach.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.3 : 1)
-                        .accessibilityLabel("Send")
-                }.disabled(!coach.canSpeak)
-                if coach.canAnswer { quickReplies }
+                HaloComposer(text: $coach.draft, prompt: prompt, recording: speech.isRecording,
+                             enabled: coach.canSpeak, microphone: { coach.toggleMic() },
+                             focus: $typing, send: { coach.reply() })
+                quickReplies.disabled(!coach.canAnswer)
                 if let error = speech.lastError { Text(error).font(HaloKit.text(12)).foregroundStyle(.red) }
             }
             .padding(16)
@@ -845,7 +861,8 @@ struct LessonBoard: View {
     }
     /// One-tap things a student says to a tutor.
     private var quickReplies: some View {
-        FlowRow(spacing: 8) {
+        ScrollView(.horizontal, showsIndicators: true) {
+            HStack(spacing: 8) {
             if coach.isHook {
                 quick("No idea, show me", icon: "eyes") { coach.reply(action: "skip") }
             } else {
@@ -857,6 +874,7 @@ struct LessonBoard: View {
                 quick("Why does that work?", icon: "questionmark") { send("Why does that work?") }
                 quick("Come back to this", icon: "arrow.uturn.right") { coach.reply(action: "skip") }
             }
+            }.fixedSize(horizontal: true, vertical: false).padding(.vertical, 3)
         }
     }
     private func send(_ text: String) { coach.draft = text; coach.reply() }
@@ -875,8 +893,7 @@ struct LessonBoard: View {
     // MARK: The end
     private func completion(_ summary: LessonSummary, wide: Bool) -> some View {
         let concepts = coach.plan?.concepts ?? []
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+        return VStack(alignment: .leading, spacing: 24) {
                 stage(wide: wide)
                 Text("Look what\nyou connected.").font(HaloKit.title(46)).tracking(-1).arrives(1)
                 VStack(alignment: .leading, spacing: 14) {
@@ -907,7 +924,6 @@ struct LessonBoard: View {
                     Button("Start a fresh lesson") { coach.reset() }.buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: false)).disabled(coach.busy)
                 }.arrives(concepts.count + 3)
             }.padding(.vertical, 10).padding(.horizontal, 3).frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
-        }
     }
     @ViewBuilder private var errors: some View {
         if let error = coach.error {
@@ -974,34 +990,10 @@ private struct TrailLine: View {
         }.frame(height: 4).animation(.easeInOut(duration: 0.5), value: walked)
     }
 }
-/// The way to talk to Halo. While it listens, rings ride the microphone's level.
-private struct MicButton: View {
-    let recording: Bool
-    var level: () -> CGFloat
-    let action: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                if recording {
-                    TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { _ in
-                        let loud = min(1, level() * 1.5)
-                        Circle().fill(HaloStyle.coral.opacity(0.18)).frame(width: 52, height: 52).scaleEffect(1.12 + loud * 0.5)
-                    }
-                }
-                Circle().fill(recording ? AnyShapeStyle(HaloStyle.coral) : AnyShapeStyle(LinearGradient(colors: [HaloStyle.coral, Color(red: 0.95, green: 0.25, blue: 0.45)], startPoint: .topLeading, endPoint: .bottomTrailing)))
-                    .frame(width: 52, height: 52).shadow(color: HaloStyle.coral.opacity(0.35), radius: 10, y: 5)
-                Image(systemName: recording ? "waveform" : "mic.fill").font(.system(size: 20, weight: .semibold)).foregroundStyle(.white)
-                    .symbolEffect(.variableColor.iterative, isActive: recording)
-            }.frame(width: 56, height: 56)
-        }.buttonStyle(.plain).accessibilityLabel(recording ? "Stop and send" : "Talk to Halo")
-    }
-}
-
 @MainActor
 private struct LessonPaper: UIViewRepresentable {
     @ObservedObject var coach: LessonCoach
     let session: StudySession
-    func makeUIView(context: Context) -> NotePaperView { let view = NotePaperView(); coach.paper = view; return view }
+    func makeUIView(context: Context) -> NotePaperView { let view = NotePaperView(); view.isScrollEnabled = false; view.followsPen = false; coach.paper = view; return view }
     func updateUIView(_ view: NotePaperView, context: Context) { coach.paper = view; view.show(session) }
 }

@@ -119,8 +119,8 @@ struct PageHeader<Trailing: View>: View {
             VStack(alignment: .leading, spacing: 6) {
                 Eyebrow(eyebrow, color: HaloStyle.coral)
                 Text(title).font(HaloKit.title(38, .regular)).foregroundStyle(HaloStyle.text)
-                    .lineLimit(2).minimumScaleFactor(0.7).fixedSize(horizontal: false, vertical: true)
-                if let note, !note.isEmpty { Text(note).font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink).lineLimit(2).fixedSize(horizontal: false, vertical: true) }
+                    .fixedSize(horizontal: false, vertical: true)
+                if let note, !note.isEmpty { Text(note).font(HaloKit.hand(24)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true) }
             }
             Spacer(minLength: 12)
             trailing
@@ -155,7 +155,7 @@ struct ScribbleChip: View {
         HStack(spacing: 7) {
             if done { Image(systemName: "checkmark.circle.fill").foregroundStyle(HaloKit.leaf).font(.system(size: 14, weight: .semibold)) }
             else if let icon { Image(systemName: icon).foregroundStyle(tint).font(.system(size: 13, weight: .semibold)) }
-            Text(text).font(HaloKit.hand(21)).foregroundStyle(HaloStyle.text).lineLimit(1)
+            Text(text).font(HaloKit.hand(21)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .background(Color.white.opacity(0.85), in: Capsule())
@@ -223,7 +223,7 @@ struct PillButtonStyle: ButtonStyle {
     var filled = true
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(HaloKit.text(15, .semibold)).lineLimit(1)
+        configuration.label.font(HaloKit.text(15, .semibold)).fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 18).padding(.vertical, 11)
             .background(filled ? color.opacity(enabled ? 1 : 0.35) : Color.white, in: Capsule())
             .overlay(Capsule().stroke(color.opacity(filled ? 0 : 0.3)))
@@ -278,5 +278,51 @@ struct EmptyDesk: View {
             Text(note).font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).frame(maxWidth: 420)
         }
         .padding(.vertical, 34).padding(.horizontal, 20).frame(maxWidth: .infinity)
+    }
+}
+
+/// The same conversation controls on every desk: microphone, growing text field, send.
+/// Context actions belong below this row so they never squeeze the student's words.
+struct HaloComposer: View {
+    @Binding var text: String
+    var prompt = "Ask Halo…"
+    var recording = false
+    var enabled = true
+    var canSend = true
+    var microphone: (() -> Void)?
+    var focus: FocusState<Bool>.Binding?
+    var send: () -> Void
+    @FocusState private var focused: Bool
+
+    private var ready: Bool { enabled && canSend && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            if let microphone {
+                Button { if let focus { focus.wrappedValue = false } else { focused = false }; microphone() } label: {
+                    Image(systemName: recording ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 17, weight: .semibold)).frame(width: 44, height: 44)
+                        .foregroundStyle(.white).background(HaloStyle.coral, in: Circle())
+                }.buttonStyle(.plain).disabled(!enabled)
+                    .accessibilityLabel(recording ? "Stop listening" : "Talk to Halo")
+            }
+            TextField(prompt, text: $text, axis: .vertical)
+                .font(HaloKit.text(17)).textFieldStyle(.plain).lineLimit(1...4)
+                .padding(.horizontal, 12).padding(.vertical, 11)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .background(HaloStyle.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .focused(focus ?? $focused).submitLabel(.send).onSubmit { if ready { send() } }
+                .disabled(!enabled).accessibilityLabel("Your question")
+            Button { if ready { send() } } label: {
+                Image(systemName: "arrow.up").font(.system(size: 17, weight: .bold))
+                    .frame(width: 44, height: 44).foregroundStyle(ready ? Color.white : HaloStyle.ink.opacity(0.5))
+                    .background(ready ? HaloStyle.ink : HaloStyle.ink.opacity(0.1), in: Circle())
+                    .animation(.spring(duration: 0.25), value: ready)
+            }
+            // Not `.disabled`: that fades the whole button until it looks broken. With nothing to send it reads as waiting, and does nothing.
+            .buttonStyle(.plain).allowsHitTesting(ready).accessibilityLabel("Send to Halo")
+        }
+        .padding(10)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke((focus?.wrappedValue ?? focused) || recording ? HaloStyle.coral.opacity(0.6) : HaloStyle.ink.opacity(0.15)))
     }
 }

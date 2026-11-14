@@ -136,7 +136,8 @@ struct HaloMargin: View {
             if store.busy, !store.agentTodos.isEmpty, !speaking { agentPlan }
             if showsStatus {
                 HStack(alignment: .top, spacing: 12) {
-                    micButton(size: 44)
+                    Image(systemName: micSymbol).font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(HaloStyle.coral).frame(width: 30, height: 44)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title).font(HaloKit.text(13, .bold)).tracking(0.6).foregroundStyle(HaloStyle.coral).lineLimit(1)
                         Text(subtitle).font(HaloKit.text(16.5)).foregroundStyle(subtitleStyle).lineSpacing(2).lineLimit(sideways ? 5 : 4).fixedSize(horizontal: false, vertical: true)
@@ -188,19 +189,10 @@ struct HaloMargin: View {
                 }.buttonStyle(.plain).accessibilityHint("Halo looks this up on the web")
             }
             if showsInput {
-                HStack(spacing: 10) {
-                    if !showsStatus { micButton(size: 40) }
-                    TextField(inputPlaceholder, text: Binding(get: { store.draft }, set: { store.setDraft($0) }), axis: .vertical)
-                        .lineLimit(1...3).font(HaloKit.text(16)).textFieldStyle(.plain)
-                        .padding(.horizontal, 14).padding(.vertical, 11)
-                        .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(focused ? HaloStyle.ink.opacity(0.6) : Color.black.opacity(0.1)))
-                        .focused($focused).submitLabel(.send).onSubmit { store.ask() }
-                        .accessibilityLabel("Your question")
-                    Button { store.ask() } label: { Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).frame(width: 40, height: 40) }
-                        .buttonStyle(.plain).foregroundStyle(.white).background(canSend ? HaloStyle.coral : Color.black.opacity(0.18), in: Circle())
-                        .disabled(!canSend).accessibilityLabel("Send")
-                }
+                HaloComposer(text: Binding(get: { store.draft }, set: { store.setDraft($0) }),
+                             prompt: inputPlaceholder, recording: speech.isRecording, canSend: canSend,
+                             microphone: { store.toggleListening() }, focus: $focused,
+                             send: { store.ask() })
             }
         }
         .padding(.top, 8)

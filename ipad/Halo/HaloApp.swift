@@ -15,7 +15,7 @@ struct HaloApp: App {
                 // Halo is ink on paper. Dark Mode would put white text on the light page.
                 .preferredColorScheme(.light)
                 .task { await store.loadLibrary(); await store.runLaunchScript() }
-                .onOpenURL { url in Task { await store.importPDF(url) } }
+                .onOpenURL { url in Task { await store.importDocument(url) } }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .background { store.lesson.hush(); store.cancelAnswer(); store.speech.stop(); Task { await store.flush(); await store.flushLoose() } }
                 }
@@ -44,7 +44,7 @@ struct LibraryView: View {
         NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $compactColumn) {
             List {
                 Section {
-                    Button { importing = true } label: { Label("Import a PDF", systemImage: "plus.circle.fill").foregroundStyle(HaloStyle.coral) }
+                    Button { importing = true } label: { Label("Import a document", systemImage: "plus.circle.fill").foregroundStyle(HaloStyle.coral) }
                     Button { Task { await store.openSample() } } label: { Label("Try a sample lesson", systemImage: "sparkles") }
                     Button { store.openQuickNotes() } label: {
                         HStack {
@@ -83,23 +83,26 @@ struct LibraryView: View {
         }
         .onChange(of: store.document?.id) { _, id in compactColumn = id == nil ? .sidebar : .detail }
         .onAppear { if CommandLine.arguments.contains("--settings") { settings = true } }   // for screenshots
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf] + ["ppt", "pptx", "doc", "docx"].compactMap { UTType(filenameExtension: $0) }, allowsMultipleSelection: false) { result in
             switch result {
-            case .success(let urls): if let url = urls.first { Task { await store.importPDF(url) } }
-            case .failure(let error): store.error = error.localizedDescription
+            case .success(let urls): if let url = urls.first { Task { await store.importDocument(url) } }
+            case .failure(let error): store.importError = error.localizedDescription
             }
         }
+        .alert("Couldn’t import document", isPresented: Binding(get: { store.importError != nil }, set: { if !$0 { store.importError = nil } })) {
+            Button("OK") { store.importError = nil }
+        } message: { Text(store.importError ?? "") }
         .sheet(isPresented: $settings) { SettingsView(store: store) }
         .fullScreenCover(isPresented: Binding(get: { store.showNotebook }, set: { if !$0 { store.closeNotebook() } })) { NotebookView(store: store) }
         .sheet(isPresented: Binding(get: { store.needsOnboarding }, set: { if !$0 { store.finishOnboarding(nil) } })) { OnboardingView(store: store).interactiveDismissDisabled() }
         .alert("Delete from Halo?", isPresented: Binding(get: { deletion != nil }, set: { if !$0 { deletion = nil } })) {
             Button("Cancel", role: .cancel) { deletion = nil }
             Button("Delete", role: .destructive) { if let item = deletion { Task { await store.delete(item) } }; deletion = nil }
-        } message: { Text("This removes Halo’s copy and its notes. The original PDF is unchanged.") }
+        } message: { Text("This removes Halo’s copy and its notes. The original document is unchanged.") }
         .diveBoard(store, when: !store.showNotebook)
         .overlay {
             if store.loading {
-                VStack(spacing: 12) { HaloRing(size: 46, working: true); Text("opening your document…").font(HaloKit.hand(25)).foregroundStyle(HaloStyle.text) }
+                VStack(spacing: 12) { HaloRing(size: 46, working: true); Text(store.openingMessage).font(HaloKit.hand(25)).foregroundStyle(HaloStyle.text) }
                     .padding(.horizontal, 30).padding(.vertical, 24).background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
             }

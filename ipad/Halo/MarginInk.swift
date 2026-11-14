@@ -508,8 +508,10 @@ final class MarginInkView: UIView {
             + "|\(ticks.count)|\(glance.map { "\($0.x),\($0.y)" } ?? "")"
         guard key != signature else { return }
         signature = key
-        // The circle belongs to the open note: when the note closes it fades away, and only the numbered tab stays.
-        if let shown = shownCircle, shown.id != active || !sessions.contains(where: { $0.id == shown.id }) {
+        // The circle is there to say "this part": once the question about it has been asked it fades away, and only
+        // the numbered tab stays. A circle Halo drew itself around a mistake stays while its note is open.
+        func keepsCircle(_ session: StudySession) -> Bool { session.id == active && (session.messages.isEmpty || session.origin == "check") }
+        if let shown = shownCircle, !sessions.contains(where: { $0.id == shown.id && keepsCircle($0) }) {
             drawn.removeAll { $0 === shown.layer }
             fadeOut(shown.layer)
             shownCircle = nil
@@ -519,7 +521,7 @@ final class MarginInkView: UIView {
         var pageLevel = 0
         for session in sessions {
             let isActive = session.id == active
-            if isActive, let lasso = session.lasso, lasso.count > 2 {
+            if keepsCircle(session), let lasso = session.lasso, lasso.count > 2 {
                 let circle = circleLayer(lasso, dimmed: false)
                 // Reopening a note draws its circle back in.
                 if shownCircle?.id != session.id, !(session.origin == "check" && !penned.contains(session.id)) { pen(circle, seconds: 0.4) }

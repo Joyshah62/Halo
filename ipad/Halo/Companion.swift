@@ -55,29 +55,20 @@ struct HaloDock: View {
 
     /// The ask field and page tools, slid out from the avatar.
     private var field: some View {
-        HStack(spacing: 6) {
-            TextField("Ask Halo anything…", text: $text)
-                .font(HaloKit.text(16.5)).textFieldStyle(.plain).submitLabel(.send).focused($focused)
-                .onSubmit(send).padding(.leading, 16).frame(minWidth: 120)
+        VStack(alignment: .leading, spacing: 8) {
+            HaloComposer(text: $text, microphone: { store.askAboutPage(store.pageIndex) },
+                         focus: $focused, send: send)
                 .accessibilityHint("A question about this page, or something to do, like go to page 12 or quiz me")
-            if typed.isEmpty {
-                Button { focused = false; store.askAboutPage(store.pageIndex) } label: {
-                    Image(systemName: "mic.fill").font(.system(size: 15, weight: .semibold)).frame(width: 38, height: 38)
-                        .background(HaloStyle.coral, in: Circle()).foregroundStyle(.white)
-                }.buttonStyle(.plain).accessibilityLabel("Ask out loud")
-            } else {
-                Button(action: send) {
-                    Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38)
-                        .background(HaloStyle.coral, in: Circle()).foregroundStyle(.white)
-                }.buttonStyle(.plain).accessibilityLabel("Send to Halo")
+            ScrollView(.horizontal, showsIndicators: false) {
+                // Its own card: bare icons over a dark page couldn't be seen.
+                tools.fixedSize(horizontal: true, vertical: false)
+                    .padding(4)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12)))
+                    .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
+                    .padding(.vertical, 8).padding(.horizontal, 2)   // room for the shadow inside the scroll view
             }
-            Divider().frame(height: 24).padding(.horizontal, 2)
-            tools
         }
-        .padding(5)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().stroke(focused ? HaloStyle.coral.opacity(0.55) : Color.clear, lineWidth: 1.5))
-        .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
         .transition(.move(edge: .leading).combined(with: .opacity))
     }
 
@@ -113,7 +104,7 @@ struct HaloDock: View {
                 Button { withAnimation(.spring(duration: 0.3)) { store.tool = tool } } label: {
                     HStack(spacing: 5) {
                         Image(systemName: tool == .circle ? "circle.dashed" : tool == .write ? "pencil.tip" : "book")
-                        if on || wide { Text(tool.rawValue).lineLimit(1).fixedSize() }
+                        Text(tool.rawValue).lineLimit(1).fixedSize()
                     }
                     .font(HaloKit.text(13, .semibold))
                     .padding(.horizontal, on ? 12 : 9).frame(height: 38)
@@ -124,7 +115,7 @@ struct HaloDock: View {
             Button { store.tutorMode.toggle(); store.react(.happy, say: store.tutorMode ? "Hints only. You do the thinking" : "Full answers again") } label: {
                 HStack(spacing: 5) {
                     Image(systemName: store.tutorMode ? "lightbulb.fill" : "lightbulb")
-                    if wide { Text("Hints").lineLimit(1).fixedSize() }
+                    Text("Hints").lineLimit(1).fixedSize()
                 }
                 .font(HaloKit.text(13, .semibold)).padding(.horizontal, 10).frame(height: 38)
                 .background(store.tutorMode ? HaloKit.amber : Color.clear, in: Capsule())
@@ -132,9 +123,12 @@ struct HaloDock: View {
             }.buttonStyle(.plain).accessibilityLabel("Tutor mode: hints instead of answers").accessibilityAddTraits(store.tutorMode ? .isSelected : [])
             if store.tool == .circle {
                 Button { store.circleWithFinger.toggle() } label: {
-                    Image(systemName: store.circleWithFinger ? "hand.point.up.left.fill" : "hand.point.up.left").font(.system(size: 13, weight: .semibold))
-                        .frame(width: 38, height: 38)
-                        .background(store.circleWithFinger ? HaloStyle.ink.opacity(0.15) : Color.clear, in: Circle()).foregroundStyle(HaloStyle.text)
+                    HStack(spacing: 5) {
+                        Image(systemName: store.circleWithFinger ? "hand.point.up.left.fill" : "hand.point.up.left")
+                        Text("Finger").lineLimit(1).fixedSize()
+                    }
+                    .font(HaloKit.text(13, .semibold)).padding(.horizontal, 10).frame(height: 38)
+                    .background(store.circleWithFinger ? HaloStyle.ink.opacity(0.15) : Color.clear, in: Capsule()).foregroundStyle(HaloStyle.text)
                 }.buttonStyle(.plain).accessibilityLabel("Circle with a finger too").accessibilityAddTraits(store.circleWithFinger ? .isSelected : [])
             }
             if store.demoMode { Text("DEMO").font(HaloKit.text(9, .bold)).padding(.horizontal, 6).padding(.vertical, 3).background(.orange.opacity(0.15), in: Capsule()) }

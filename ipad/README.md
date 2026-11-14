@@ -191,3 +191,11 @@ For screenshots, add `--lesson-phase source|visual|example` and optionally `--le
 The avatar sits in a dock at the bottom of the page (top, while writing). Type anything into **Ask Halo anything…** with no circle: a question is asked about the page in front of you; "go to page 12", "next page", "find entropy", "quiz me" / "teach me", "recap", "open my notes", "what's this chapter about?" do what they say; "show me a video…" goes to the web (`StudyStore.askHalo`). Tap the avatar for a menu of everything Halo can do. It listens, thinks and talks with the app, dozes after 75 s of nothing (tap to wake), beams when a step of working is right, and keeps a streak with confetti at 3, 5 and every 5 after. On the start screen it greets you above the same ask bar (answered from the web) and your shelf of documents.
 
 Scripted checks: `--sample --say "go to page 3"`, `--sample --launcher`, `--sample --cheer 3`.
+
+## PowerPoint and Word imports
+
+**Import a document** accepts PDF, PowerPoint (`.ppt`, `.pptx`), and Word (`.doc`, `.docx`) from Files or **Open in Halo**. Office files up to 25 MB are sent to the configured Halo server and converted to PDF. The app saves that PDF under the original document name; search, circle-and-ask, handwriting, notes, and lessons then work as they do for PDFs. The source file is unchanged. Saved documents reopen offline; the initial Office conversion requires the server even in sample-answer mode.
+
+Install LibreOffice on the server (`brew install --cask libreoffice` on macOS, or `sudo apt-get install libreoffice` on Debian/Ubuntu), then restart the Halo server. Set `LIBREOFFICE_PATH` in `server/.env` if the executable is not on PATH or in `/Applications/LibreOffice.app`. Conversion uses an isolated profile with macros disabled and removes temporary files afterward. No third-party conversion service is used.
+
+Slides become static PDF pages. Animations, transitions, and embedded videos are not interactive; missing fonts may change layout. Password-protected or damaged files should be exported as unlocked PDFs. Import errors leave the existing library unchanged.

@@ -27,6 +27,8 @@ final class AnswerPlayer: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDe
     private var watchdog: Task<Void, Never>?
     private var completion: CheckedContinuation<Void, Error>?
     private var token = UUID()
+    /// Releases the audio session once nothing has played for a moment (see `finish`).
+    private var release: Task<Void, Never>?
     /// Told when playback starts (true) and ends (false), so the wake-word listener can step aside.
     var onActive: ((Bool) -> Void)?
 
@@ -38,17 +40,32 @@ final class AnswerPlayer: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDe
     }
 
     func play(_ step: AnswerStep) async throws {
-        try Task.checkCancellation(); stop()
+        try Task.checkCancellation()
+        // Ends whatever was playing but keeps the audio session: clips that follow each other (a lesson plays
+        // a filler, a reaction, then each step) used to switch audio off and on between them, and every
+        // restart swallowed the first syllable of the next clip.
+        finish(CancellationError(), release: false)
+        release?.cancel(); release = nil
         let id = UUID(); token = id
         onActive?(true)
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-            try AVAudioSession.sharedInstance().setActive(true); sessionActive = true
+            let session = AVAudioSession.sharedInstance()
+            // Coming straight from the microphone, the audio route is changing (on Bluetooth headphones this is a
+            // switch out of call mode). Starting a clip before it settles cuts off its first words.
+            let switching = session.category != .playback || session.mode != .spokenAudio
+            if switching { try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers]) }
+            if !sessionActive || switching { try session.setActive(true); sessionActive = true }
+            if switching {
+                let wireless = session.currentRoute.outputs.contains { [.bluetoothA2DP, .bluetoothHFP, .bluetoothLE].contains($0.portType) }
+                try await Task.sleep(for: .milliseconds(wireless ? 350 : 120))
+                guard token == id else { throw CancellationError() }
+            }
             try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
                     completion = continuation
                     if let encoded = step.audio, let data = Data(base64Encoded: encoded), let player = try? AVAudioPlayer(data: data) {
                         audio = player; player.delegate = self; player.isMeteringEnabled = true
+                        player.prepareToPlay()
                         if player.play() {
                             let duration = player.duration.isFinite ? player.duration : 60
                             armWatchdog(seconds: min(180, max(8, duration + 5)), token: id)
@@ -84,9 +101,10 @@ final class AnswerPlayer: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDe
             self.finish(PlaybackFailure.timedOut)
         }
     }
+    /// Stops now and gives the audio back at once (the microphone may be about to take it).
     func stop() {
         token = UUID()
-        finish(CancellationError())
+        finish(CancellationError(), release: true)
     }
     /// Loudness of the clip playing now (0…1), or nil when no metered clip is playing.
     var outputLevel: CGFloat? {
@@ -94,18 +112,37 @@ final class AnswerPlayer: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDe
         audio.updateMeters()
         return CGFloat(max(0, min(1, (audio.averagePower(forChannel: 0) + 45) / 45)))
     }
-    private func finish(_ error: Error? = nil) {
+    /// `release`: true gives the audio session back now; false keeps it for the next clip; nil (a clip ended on its
+    /// own) gives it back after a short pause, unless another clip has started by then.
+    private func finish(_ error: Error? = nil, release now: Bool? = nil) {
         watchdog?.cancel(); watchdog = nil
         let pending = completion; completion = nil
         let hadUtterance = utterance != nil
         utterance = nil
         audio?.stop(); audio = nil
         if hadUtterance, let synthesizer, synthesizer.isSpeaking || synthesizer.isPaused { synthesizer.stopSpeaking(at: .immediate) }
+        if let error { pending?.resume(throwing: error) } else { pending?.resume() }
+        switch now {
+        case true?: releaseSession()
+        case false?: break
+        case nil:
+            release?.cancel()
+            release = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(900)) } catch { return }
+                guard let self, self.completion == nil else { return }
+                self.releaseSession()
+            }
+        }
+    }
+    private func releaseSession() {
+        release?.cancel(); release = nil
         if sessionActive {
             sessionActive = false
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            // The microphone may have taken the session in the meantime: then it is the microphone's to release.
+            if AVAudioSession.sharedInstance().category == .playback {
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            }
         }
-        if let error { pending?.resume(throwing: error) } else { pending?.resume() }
         onActive?(false)
     }
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -159,7 +196,9 @@ final class SpeechInput: ObservableObject {
         guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else { lastError = "Voice isn’t available right now. Type your question."; throw NSError(domain: "HaloSpeech", code: 2, userInfo: [NSLocalizedDescriptionKey: lastError!]) }
         onActive?(true)
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetoothHFP])
+            // A2DP, not HFP: Bluetooth headphones stay in full-quality listening mode and the iPad's own microphone hears
+            // the question. HFP (the headphones' mic) puts them in call mode, and switching back cut off Halo's next words.
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetoothA2DP])
             try AVAudioSession.sharedInstance().setActive(true); sessionActive = true
         } catch { stop(); throw error }
         let engine = AVAudioEngine(), request = SFSpeechAudioBufferRecognitionRequest()

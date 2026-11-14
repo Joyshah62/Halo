@@ -2,8 +2,10 @@ import Foundation
 
 public enum HaloError: LocalizedError, Equatable {
     case invalidServer, server(Int), malformedEvent, incompleteStream, unsupportedNotes, unreadableDocument
+    case importFailed(String)
     public var errorDescription: String? {
         switch self {
+        case .importFailed(let message): return message
         case .invalidServer: return "Add a valid HTTP or HTTPS server address in Settings."
         case .server(let status): return "The Halo server returned HTTP \(status). Check the server connection and configuration."
         case .malformedEvent: return "The server sent an unreadable answer. Please try again."
@@ -197,6 +199,26 @@ public struct HaloClient: Sendable {
         let reply: Reply = try await post("api/speak", Ask(text: text), server: server, timeout: 30)
         return reply.audio
     }
+    /// Office documents are converted by the user's Halo server, then kept locally as PDFs.
+    public func convertOffice(_ data: Data, extension ext: String, server: String) async throws -> Data {
+        guard data.count <= 25 * 1024 * 1024 else { throw HaloError.importFailed("Choose a document smaller than 25 MB.") }
+        var url = URLComponents(url: try Self.endpoint(server, path: "api/documents/convert"), resolvingAgainstBaseURL: false)!
+        url.queryItems = [URLQueryItem(name: "extension", value: ext.lowercased())]
+        var request = URLRequest(url: url.url!)
+        request.httpMethod = "POST"; request.timeoutInterval = 110
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+        let (pdf, response) = try await session.data(for: request)
+        guard let response = response as? HTTPURLResponse else { throw HaloError.incompleteStream }
+        guard (200..<300).contains(response.statusCode) else {
+            struct Failure: Decodable { let error: String }
+            let message = (try? JSONDecoder().decode(Failure.self, from: pdf).error)
+            throw HaloError.importFailed(message ?? "Office import failed (HTTP \(response.statusCode)). Check your Halo server or export the document as PDF.")
+        }
+        guard pdf.starts(with: Data("%PDF-".utf8)) else { throw HaloError.unreadableDocument }
+        return pdf
+    }
+
     private func post<Payload: Encodable, Reply: Decodable>(_ path: String, _ payload: Payload, server: String, timeout: TimeInterval) async throws -> Reply {
         var request = URLRequest(url: try Self.endpoint(server, path: path))
         request.httpMethod = "POST"; request.timeoutInterval = timeout
@@ -224,35 +246,57 @@ public struct HaloClient: Sendable {
     public func stuck(_ payload: StuckRequest, server: String) -> AsyncThrowingStream<AskEvent, Error> {
         stream("api/stuck", payload, server: server, timeout: 120)
     }
+    private static func canRetryStream(_ error: Error) -> Bool {
+        if error as? HaloError == .incompleteStream { return true }
+        guard let error = error as? URLError else { return false }
+        return [.networkConnectionLost, .cannotConnectToHost, .timedOut].contains(error.code)
+    }
     private func stream<Payload: Encodable & Sendable>(_ path: String, _ payload: Payload, server: String, timeout: TimeInterval) -> AsyncThrowingStream<AskEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
-                do {
-                    var request = URLRequest(url: try Self.endpoint(server, path: path))
-                    request.httpMethod = "POST"; request.timeoutInterval = timeout
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-                    request.httpBody = try JSONEncoder().encode(payload)
-                    let (bytes, response) = try await session.bytes(for: request)
-                    guard let response = response as? HTTPURLResponse else { throw HaloError.incompleteStream }
-                    guard (200..<300).contains(response.statusCode) else { throw HaloError.server(response.statusCode) }
-                    var decoder = EventDecoder(), ended = false
-                    // AsyncBytes.lines can omit empty lines, which are SSE event boundaries.
-                    for try await byte in bytes {
+                var receivedAnswer = false
+                // A dev-server restart or transient Wi-Fi drop may end an otherwise valid response.
+                // Retry only before any answer content, so a partial explanation is never duplicated.
+                let attempts = path == "api/ask" ? 2 : 1
+                for attempt in 0..<attempts {
+                    do {
                         try Task.checkCancellation()
-                        if let event = try decoder.consume(byte: byte) {
-                            continuation.yield(event)
-                            if event == .done { ended = true; break }
-                            if case .failure = event { ended = true; break }
+                        var request = URLRequest(url: try Self.endpoint(server, path: path))
+                        request.httpMethod = "POST"; request.timeoutInterval = timeout
+                        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                        request.setValue("ipad/stream-recovery-v2", forHTTPHeaderField: "X-Halo-Client")
+                        request.httpBody = try JSONEncoder().encode(payload)
+                        let (bytes, response) = try await session.bytes(for: request)
+                        guard let response = response as? HTTPURLResponse else { throw HaloError.incompleteStream }
+                        guard (200..<300).contains(response.statusCode) else { throw HaloError.server(response.statusCode) }
+                        var decoder = EventDecoder(), ended = false
+                        // AsyncBytes.lines can omit empty lines, which are SSE event boundaries.
+                        for try await byte in bytes {
+                            try Task.checkCancellation()
+                            if let event = try decoder.consume(byte: byte) {
+                                if case .step = event { receivedAnswer = true }
+                                continuation.yield(event)
+                                if event == .done { ended = true; break }
+                                if case .failure = event { ended = true; break }
+                            }
                         }
+                        if !ended, let event = try decoder.finish() {
+                            if case .step = event { receivedAnswer = true }
+                            continuation.yield(event)
+                            switch event { case .done, .failure: ended = true; default: break }
+                        }
+                        guard ended else { throw HaloError.incompleteStream }
+                        continuation.finish()
+                        return
+                    } catch {
+                        guard !Task.isCancelled, !receivedAnswer, attempt + 1 < attempts, Self.canRetryStream(error) else {
+                            continuation.finish(throwing: error); return
+                        }
+                        do { try await Task.sleep(for: .milliseconds(800)) }
+                        catch { continuation.finish(throwing: error); return }
                     }
-                    if !ended, let event = try decoder.finish() {
-                        continuation.yield(event)
-                        switch event { case .done, .failure: ended = true; default: break }
-                    }
-                    guard ended else { throw HaloError.incompleteStream }
-                    continuation.finish()
-                } catch { continuation.finish(throwing: error) }
+                }
             }
             continuation.onTermination = { @Sendable _ in task.cancel() }
         }

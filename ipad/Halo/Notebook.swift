@@ -38,24 +38,27 @@ struct NotebookView: View {
     }
 
     private var list: some View {
-        List {
-            Section {
+        // A plain column rather than a List: a List sets its own margins, which on some iPads pushed the
+        // header and the cards past the left edge of this fixed-width column.
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Eyebrow(store.notebookIsLoose ? "Quick notes" : "Notes for")
+                    Text(store.notebookIsLoose ? "not tied to a document" : store.displayTitle).font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink)
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 4).padding(.bottom, 4)
                 ForEach(store.notebook) { entry in
                     Button { store.selectNote(entry.id) } label: { row(entry) }
                         .buttonStyle(.plain)
-                        .listRowSeparator(.hidden).listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 5, leading: 14, bottom: 5, trailing: 10))
-                        .swipeActions(edge: .trailing) { Button("Delete", role: .destructive) { store.deleteNote(entry.id) } }
                         .contextMenu { Button("Delete note", systemImage: "trash", role: .destructive) { store.deleteNote(entry.id) } }
                 }
-            } header: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Eyebrow(store.notebookIsLoose ? "Quick notes" : "Notes for")
-                    Text(store.notebookIsLoose ? "not tied to a document" : store.displayTitle).font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink).lineLimit(1).textCase(nil)
-                }.padding(.leading, 2).padding(.bottom, 4)
             }
+            .padding(.leading, 16).padding(.trailing, 14).padding(.top, 18).padding(.bottom, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .listStyle(.plain).scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
+        .clipped()
     }
     private func row(_ entry: NotebookEntry) -> some View {
         let open = entry.id == store.noteID
@@ -149,10 +152,12 @@ private struct NotePage: View {
                     HStack(spacing: 12) { pageLink; Spacer(minLength: 8); writingTools }
                     HStack(spacing: 12) { Spacer(minLength: 0); versionTools }
                 }
+                // The last choice must always fit: ViewThatFits falls back to it even when it doesn't, and an
+                // overflowing row here made the whole screen wider than the iPad (the notes list slid off the left).
                 VStack(alignment: .leading, spacing: 10) {
                     pageLink
                     HStack(spacing: 10) { writingTools }
-                    HStack(spacing: 10) { versionTools }
+                    FlowRow(spacing: 10) { versionTools }
                 }
             }
         }
@@ -236,8 +241,11 @@ private struct NotePage: View {
             }
             if let draft = store.refine, draft.noteID == entry.id, case .ink(let area, let points) = draft.target {
                 let shown = area.offsetBy(dx: -scroll.x, dy: -scroll.y)
-                LoopShape(points: points.map { CGPoint(x: $0.x - scroll.x, y: $0.y - scroll.y) }, closed: true)
-                    .stroke(HaloStyle.coral, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)).allowsHitTesting(false)
+                if !draft.asked {
+                    LoopShape(points: points.map { CGPoint(x: $0.x - scroll.x, y: $0.y - scroll.y) }, closed: true)
+                        .stroke(HaloStyle.coral, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)).allowsHitTesting(false)
+                        .transition(.opacity)
+                }
                 RefineCard(store: store, draft: draft, keepTitle: "Keep on my note", keep: { store.keepRefinement() })
                     .offset(place(shown, width: width))
                     .transition(.scale(scale: 0.92, anchor: .topLeading).combined(with: .opacity))
@@ -342,7 +350,8 @@ private struct EnhancedNoteView: View {
                         .onEnded { _ in finishCircle() })
                 LoopShape(points: loop).stroke(HaloStyle.coral, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)).allowsHitTesting(false)
             }
-            if let draft = store.refine, draft.noteID == entry.id, case .enhanced(_, _, _, let points) = draft.target {
+            // The circle stays only until the question is asked.
+            if let draft = store.refine, draft.noteID == entry.id, !draft.asked, case .enhanced(_, _, _, let points) = draft.target {
                 LoopShape(points: points, closed: true)
                     .stroke(HaloStyle.coral, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)).allowsHitTesting(false)
             }
@@ -639,23 +648,8 @@ private struct RefineCard: View {
                         }.buttonStyle(.plain)
                     }
                 }
-                HStack(spacing: 8) {
-                    TextField(draft.listening ? "Listening…" : "Or ask anything…", text: ask)
-                        .font(HaloKit.text(15)).textFieldStyle(.plain).submitLabel(.go).onSubmit { store.runRefine() }
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(HaloStyle.ink.opacity(0.12)))
-                    Button { store.listenForRefine() } label: {
-                        Image(systemName: draft.listening ? "waveform" : "mic.fill").font(.system(size: 14, weight: .semibold))
-                            .frame(width: 34, height: 34).background(draft.listening ? HaloStyle.coral : HaloStyle.ink.opacity(0.08), in: Circle())
-                            .foregroundStyle(draft.listening ? .white : HaloStyle.ink)
-                            .symbolEffect(.variableColor.iterative, isActive: draft.listening)
-                    }.buttonStyle(.plain).accessibilityLabel(draft.listening ? "Stop listening" : "Ask out loud")
-                    if !draft.ask.trimmingCharacters(in: .whitespaces).isEmpty {
-                        Button { store.runRefine() } label: { Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).frame(width: 34, height: 34)
-                            .background(HaloStyle.coral, in: Circle()).foregroundStyle(.white) }.buttonStyle(.plain).accessibilityLabel("Ask")
-                    }
-                }
+                HaloComposer(text: ask, recording: draft.listening,
+                             microphone: { store.listenForRefine() }, send: { store.runRefine() })
             }
             if let error = draft.error { Text(error).font(HaloKit.text(13)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
         }
@@ -713,7 +707,8 @@ struct FlowRow: Layout {
         let width = proposal.width ?? .infinity
         var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0, widest: CGFloat = 0
         for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
+            let ideal = view.sizeThatFits(.unspecified)
+            let size = view.sizeThatFits(ProposedViewSize(width: min(ideal.width, width), height: nil))
             if x > 0, x + size.width > width { y += line + spacing; x = 0; line = 0 }
             x += size.width + spacing; line = max(line, size.height); widest = max(widest, x - spacing)
         }
@@ -722,7 +717,8 @@ struct FlowRow: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         var x = bounds.minX, y = bounds.minY, line: CGFloat = 0
         for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
+            let ideal = view.sizeThatFits(.unspecified)
+            let size = view.sizeThatFits(ProposedViewSize(width: min(ideal.width, bounds.width), height: nil))
             if x > bounds.minX, x + size.width > bounds.maxX { y += line + spacing; x = bounds.minX; line = 0 }
             view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
             x += size.width + spacing; line = max(line, size.height)

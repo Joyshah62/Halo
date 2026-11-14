@@ -83,21 +83,11 @@ struct LandingView: View {
     private static let ideas = ["Why is the sky blue?", "How does CRISPR edit a gene?", "Why does the chain rule multiply?", "Show me a video on black holes"]
     private var ask: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles").font(.system(size: 18, weight: .medium)).foregroundStyle(HaloStyle.coral)
-                TextField("Ask me anything…", text: $question).font(HaloKit.text(19)).textFieldStyle(.plain).submitLabel(.send).onSubmit(look)
-                Button(action: look) {
-                    Image(systemName: "arrow.up").font(.system(size: 16, weight: .bold)).frame(width: 42, height: 42)
-                        .background(question.trimmingCharacters(in: .whitespaces).isEmpty ? HaloStyle.ink.opacity(0.2) : HaloStyle.coral, in: Circle()).foregroundStyle(.white)
-                }.buttonStyle(.plain).disabled(question.trimmingCharacters(in: .whitespaces).isEmpty).accessibilityLabel("Ask Halo")
-            }
-            .padding(.leading, 20).padding(.trailing, 9).frame(height: 62)
-            .background(Color.white, in: Capsule()).overlay(Capsule().stroke(HaloStyle.coral.opacity(0.4), lineWidth: 1.5))
-            .shadow(color: HaloStyle.coral.opacity(0.14), radius: 20, y: 9)
+            HaloComposer(text: $question, prompt: "Ask Halo…", send: look)
             FlowRow(spacing: 8) {
                 ForEach(Self.ideas, id: \.self) { idea in
                     Button { store.askHalo(idea) } label: {
-                        Text(idea).font(HaloKit.hand(22)).lineLimit(1).padding(.horizontal, 14).padding(.vertical, 5)
+                        Text(idea).font(HaloKit.hand(22)).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 14).padding(.vertical, 5)
                             .background(Color.white.opacity(0.85), in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12))).foregroundStyle(HaloStyle.ink)
                     }.buttonStyle(.plain)
                 }
@@ -116,7 +106,7 @@ struct LandingView: View {
     // MARK: the ways in
     private var actions: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 14)], spacing: 14) {
-            way("plus", "Bring a PDF", "slides or a textbook", HaloStyle.coral, filled: true, action: importPDF)
+            way("plus", "Import a document", "PDF, PowerPoint or Word", HaloStyle.coral, filled: true, action: importPDF)
             way("play.fill", "Try a sample lesson", "two minutes, no setup", HaloStyle.ink) { Task { await store.openSample() } }
             way("square.and.pencil", "Start a note", store.looseNotes.isEmpty ? "rough is fine, I’ll tidy it" : "\(store.looseNotes.count) quick note\(store.looseNotes.count == 1 ? "" : "s")", HaloKit.amber) { store.openQuickNotes(new: store.looseNotes.isEmpty) }
         }
@@ -150,26 +140,32 @@ struct LandingView: View {
                 Eyebrow("Your shelf")
                 Text("tap one to pick up where you left off").font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink.opacity(0.8))
             }.padding(.leading, 4)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(Array(store.documents.prefix(12).enumerated()), id: \.element.id) { index, item in
-                        Button { Task { await store.open(item) } } label: { book(item, latest: index == 0, tilt: [-1.4, 1.1, -0.6, 1.6][index % 4]) }.buttonStyle(.plain)
-                    }
-                }.padding(.horizontal, 6).padding(.top, 14).padding(.bottom, 12)
-            }
+            // As many across as fit whole (four on a 10.5-inch iPad), then onto the next row: no card is cut off by the edge.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 166), spacing: 18, alignment: .top)], alignment: .leading, spacing: 28) {
+                ForEach(Array(store.documents.prefix(8).enumerated()), id: \.element.id) { index, item in
+                    Button { Task { await store.open(item) } } label: { book(item, latest: index == 0, tilt: [-1.4, 1.1, -0.6, 1.6][index % 4]) }.buttonStyle(.plain)
+                }
+            }.padding(.horizontal, 6).padding(.top, 14).padding(.bottom, 12)
         }
+    }
+    /// A file name as a title: no extension, no underscores, and none of the "(z-library.sk, 1lib.sk)" a download site leaves behind.
+    private static func shelfTitle(_ name: String) -> String {
+        var title = name.replacingOccurrences(of: #"\.pdf$"#, with: "", options: [.regularExpression, .caseInsensitive])
+        title = title.replacingOccurrences(of: #"[(\[][^)\]]*(z-?lib|1lib|libgen|anna)[^)\]]*[)\]]"#, with: " ", options: [.regularExpression, .caseInsensitive])
+        title = title.replacingOccurrences(of: #"[_\s]+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        return title.isEmpty ? name : title
     }
     private func book(_ item: LibraryDocument, latest: Bool, tilt: Double) -> some View {
         Taped(tilt: tilt) {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: "book.pages").font(.system(size: 20)).foregroundStyle(HaloStyle.coral)
                     .frame(width: 42, height: 42).background(HaloStyle.coral.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                Text(item.name).font(HaloKit.title(16, .semibold)).foregroundStyle(HaloStyle.text).lineLimit(3).multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading)
+                Text(Self.shelfTitle(item.name)).font(HaloKit.title(15.5, .semibold)).foregroundStyle(HaloStyle.text).lineLimit(5).minimumScaleFactor(0.85).multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
                 Text("\(item.pageCount) pages").font(HaloKit.text(12)).foregroundStyle(.secondary)
                 Text(latest ? "continue →" : item.lastOpenedAt.formatted(.relative(presentation: .named))).font(HaloKit.hand(21)).foregroundStyle(latest ? HaloStyle.coral : HaloStyle.ink).lineLimit(1)
             }
-            .padding(10).frame(width: 178, alignment: .leading)
+            .padding(10).frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .accessibilityElement(children: .combine).accessibilityHint("Opens this document")
     }

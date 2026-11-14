@@ -147,6 +147,8 @@ private func expectThrows<T>(_ expression: @autoclosure () throws -> T) throws {
         try await checks.testLocalLibraryRestoresConversationAndDrawing(); print("PASS: document, drawing, and conversation persistence")
         try await checks.testFutureNotesVersionIsNotSilentlyOverwritten(); print("PASS: schema protection")
         try await checkTransport(); print("PASS: URLSession SSE transport and incomplete-stream recovery")
+        try await checkOfficeTransport(); print("PASS: Office import upload, PDF response, and conversion errors")
+        try await checkStreamRecovery(); print("PASS: early stream reconnect, bounded retries, and no partial-answer replay")
     }
 }
 
@@ -176,4 +178,91 @@ private func checkTransport() async throws {
     MockProtocol.truncated = true
     do { for try await _ in client.ask(request, server: "https://test.invalid") {}; try fail("Truncated streams must fail") }
     catch { try expectEqual(error as? HaloError, .incompleteStream) }
+}
+
+
+private final class MockOfficeProtocol: URLProtocol {
+    static var status = 200
+    static var body = Data("%PDF-1.7\nconverted".utf8)
+    static var received: URLRequest?
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.received = request
+        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": Self.status == 200 ? "application/pdf" : "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+private func checkOfficeTransport() async throws {
+    let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [MockOfficeProtocol.self]
+    let session = URLSession(configuration: config)
+    defer { session.invalidateAndCancel() }
+    let client = HaloClient(session: session), input = Data([0x50, 0x4b, 0x03, 0x04])
+    let pdf = try await client.convertOffice(input, extension: "PPTX", server: "https://test.invalid/halo")
+    try expectEqual(pdf, MockOfficeProtocol.body)
+    let request = try unwrap(MockOfficeProtocol.received)
+    try expectEqual(request.url?.path, "/halo/api/documents/convert")
+    try expectEqual(request.url?.query, "extension=pptx")
+    try expectEqual(request.httpMethod, "POST")
+    try expectEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/octet-stream")
+    MockOfficeProtocol.status = 503; MockOfficeProtocol.body = Data(#"{"error":"Office converter unavailable"}"#.utf8)
+    do { _ = try await client.convertOffice(input, extension: "docx", server: "https://test.invalid"); try fail("Conversion errors must be shown") }
+    catch { try expectEqual(error as? HaloError, .importFailed("Office converter unavailable")) }
+    MockOfficeProtocol.status = 200; MockOfficeProtocol.body = Data("not a PDF".utf8)
+    do { _ = try await client.convertOffice(input, extension: "docx", server: "https://test.invalid"); try fail("Invalid output must not enter the library") }
+    catch { try expectEqual(error as? HaloError, .unreadableDocument) }
+}
+
+
+private final class ReconnectProtocol: URLProtocol {
+    static var attempts = 0
+    static var scenario = "empty-once"
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.attempts += 1
+        if Self.scenario == "lost-once", Self.attempts == 1 {
+            client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost)); return
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/event-stream"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        var text = ": keepalive\n\nevent: start\ndata: {\"id\":1}\n\n"
+        if Self.scenario == "failure" {
+            text += "event: error\ndata: {\"message\":\"Provider unavailable\"}\n\n"
+        } else if Self.scenario == "partial" || (Self.scenario != "always-empty" && Self.attempts > 1) {
+            text += "event: step\ndata: {\"index\":0,\"say\":\"Recovered answer\",\"ink\":[],\"audio\":null}\n\n"
+            if Self.scenario != "partial" { text += "event: done\ndata: {}\n\n" }
+        }
+        client?.urlProtocol(self, didLoad: Data(text.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+private func checkStreamRecovery() async throws {
+    let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [ReconnectProtocol.self]
+    let session = URLSession(configuration: config)
+    defer { session.invalidateAndCancel() }
+    let client = HaloClient(session: session)
+    let request = AskRequest(question: "Local recovery test", session: StudySession(number: 1, pageIndex: 0, region: nil), image: nil, contextImage: nil, selectedText: "", pageText: "", title: "Test", documentID: UUID(), tutorMode: false)
+    for scenario in ["empty-once", "lost-once"] {
+        ReconnectProtocol.scenario = scenario; ReconnectProtocol.attempts = 0
+        var steps = 0, done = false
+        for try await event in client.ask(request, server: "https://test.invalid") {
+            if case .step = event { steps += 1 }; if event == .done { done = true }
+        }
+        try expectEqual(ReconnectProtocol.attempts, 2); try expectEqual(steps, 1); try expectEqual(done, true)
+    }
+    for scenario in ["partial", "always-empty"] {
+        ReconnectProtocol.scenario = scenario; ReconnectProtocol.attempts = 0
+        do { for try await _ in client.ask(request, server: "https://test.invalid") {}; try fail("Incomplete answers must still fail") }
+        catch { try expectEqual(error as? HaloError, .incompleteStream) }
+        try expectEqual(ReconnectProtocol.attempts, scenario == "partial" ? 1 : 2)
+    }
+    ReconnectProtocol.scenario = "failure"; ReconnectProtocol.attempts = 0
+    var failure: AskEvent?
+    for try await event in client.ask(request, server: "https://test.invalid") { failure = event }
+    try expectEqual(failure, .failure("Provider unavailable")); try expectEqual(ReconnectProtocol.attempts, 1)
 }

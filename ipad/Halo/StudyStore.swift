@@ -266,15 +266,43 @@ final class StudyStore: ObservableObject {
         } catch { if openGeneration == token { self.error = error.localizedDescription } }
         if openGeneration == token { loading = false }
     }
-    func importPDF(_ url: URL) async {
-        guard let repository else { return }
+    /// PDF imports work offline; Office imports need the configured Halo server once.
+    @Published var importError: String?
+    @Published var openingMessage = "Opening your document…"
+    private var importingDocument = false
+    func importPDF(_ url: URL) async { await importDocument(url) }
+    func importDocument(_ url: URL) async {
+        guard let repository, !importingDocument else { return }
+        importingDocument = true; loading = true; importError = nil
+        openingMessage = "Opening your document…"
         let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        var converted: URL?
+        defer {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            if let converted { try? FileManager.default.removeItem(at: converted) }
+            importingDocument = false; loading = false; openingMessage = "Opening your document…"
+        }
         do {
-            guard let pdf = PDFDocument(url: url), !pdf.isLocked, pdf.pageCount > 0 else { throw HaloError.unreadableDocument }
-            let item = try await repository.importPDF(from: url, name: url.deletingPathExtension().lastPathComponent, pageCount: pdf.pageCount)
+            let ext = url.pathExtension.lowercased()
+            guard ["pdf", "ppt", "pptx", "doc", "docx"].contains(ext) else {
+                throw HaloError.importFailed("Choose a PDF, PowerPoint (.ppt or .pptx), or Word (.doc or .docx) document.")
+            }
+            var source = url
+            if ext != "pdf" {
+                openingMessage = "Preparing your \(ext.hasPrefix("ppt") ? "slides" : "Word document")…"
+                if let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > 25 * 1024 * 1024 {
+                    throw HaloError.importFailed("Choose a document smaller than 25 MB.")
+                }
+                let pdf = try await client.convertOffice(Data(contentsOf: url), extension: ext, server: serverURL)
+                let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("pdf")
+                converted = temporary
+                try pdf.write(to: temporary, options: .atomic)
+                source = temporary
+            }
+            guard let pdf = PDFDocument(url: source), !pdf.isLocked, pdf.pageCount > 0 else { throw HaloError.unreadableDocument }
+            let item = try await repository.importPDF(from: source, name: url.deletingPathExtension().lastPathComponent, pageCount: pdf.pageCount)
             await loadLibrary(); await open(item)
-        } catch { self.error = error.localizedDescription }
+        } catch { importError = error.localizedDescription }
     }
     func openSample() async {
         do {
@@ -1667,6 +1695,8 @@ struct RefineDraft: Equatable {
     var picture: Data?
     var drawing = false
     var error: String?
+    /// The question has gone to Halo (it is answering, or has answered): the circle has done its job.
+    var asked: Bool { busy || reply != nil }
 }
 
 /// One point of an enhanced note: which section, and which point in it.
