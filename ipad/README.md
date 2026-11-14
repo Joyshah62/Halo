@@ -4,11 +4,11 @@ A PDF-first native iPad app built with SwiftUI, PDFKit, PencilKit, Speech, and A
 
 ## The experience
 
-There is no side panel. The page is the whole interface.
+The page is the whole interface; Halo's margin docks beside it in landscape and under it in portrait.
 
 1. **Upload moment.** Import a PDF and Halo reads every page (`/api/digest`). A card appears over the document: Halo's own title, a spoken two-sentence brief in its voice (ElevenLabs), the three ideas to leave with in handwriting, a strip showing where the document gets hard, and "Start at page N". Pages Halo thinks will trip you up get a pulsing coral **tricky: <topic>** mark in the margin; tap it and Halo walks you through that page.
-2. **Circle and ask.** Draw a loose circle with the Pencil (or a finger, via the bottom bar). A **note** (a frosted sheet of tracing paper, no colour or title bar) opens beside the circle and starts listening; stop talking and the question sends itself. Halo's answer is **handwritten live on the note** (with the unevenness of a real hand: drifting baseline, letters that vary in size and lean) while the voice speaks each step, with a coral tail pointing at what you circled. Nothing is written over the page, so dense book pages stay readable.
-3. **Notes you can come back to.** Drag a note by its header, ask follow-ups on it, or put it away: a small numbered tab stays on the circle and reopens it. Every note is also collected in **Notes** (top bar), grouped by chapter.
+2. **Circle and ask.** Draw a loose circle with the Pencil (or a finger, via the bottom bar). A **note** (a frosted sheet of tracing paper, no colour or title bar) opens in Halo's margin (beside the page in landscape, under it in portrait) and starts listening; stop talking and the question sends itself. Halo's answer is **handwritten live on the note** (with the unevenness of a real hand: drifting baseline, letters that vary in size and lean) while the voice speaks each step, with a coral tail pointing at what you circled. Nothing is written over the page, so dense book pages stay readable.
+3. **Notes you can come back to.** Ask follow-ups on a note, or put it away: a small numbered tab stays on the circle and reopens it. Every note is also collected in **Notes** (top bar), grouped by chapter.
 4. **Chapters and search.** The top bar opens Chapters (from the PDF outline, or detected "Chapter N" headings), Notes, and a search across the book's text and your notes. Books over 80 pages are read by Halo one chapter at a time: tap ✦ on a chapter for its brief and tricky-page marks.
 5. **Session summary.** The clipboard button in the top bar opens a full-screen written summary (`/api/recap`, no audio): for each question, what was asked (dictation slips cleaned up) and how it was explained in a few bullet points, with the sticky note beside it, grouped by chapter. Switch between Today and All notes; tap a note to return to it on its page. Offline or in demo mode the summary is built on the iPad from the notes.
 6. **My notes.** The pencil-square button in the top bar opens a notebook for the document: type notes of your own, or switch to the pen and write and sketch them by hand with the Pencil (a page that grows as you fill it; a note can have both), however rough. **Enhance with AI** (`/api/notes/enhance`) organizes them under headings, expands shorthand, reads the handwriting (sent as a picture), adds missing detail (marked ✦ so you can tell it from your own points), flags anything you wrote that is wrong, lists key terms, and draws a diagram where one helps (`/api/notes/image`, appears a few seconds after the text). Your own text is never overwritten: switch between My notes and Enhanced. In demo mode the note is only regrouped on the iPad. Notes don't need a document: **Start a note** on the start screen (or **Quick notes** in the library sidebar) opens a free-standing notebook, saved in `quick-notes.json`; Halo enhances those from the notes alone. **Circle & ask** on the Enhanced version: loop any points (a circled heading or diagram takes its whole section) and pick Clean it up, Add detail, Explain it, Check it or Add a diagram, type, or say what you want (`/api/notes/refine`). Halo's answer appears in its handwriting under the circle: **Replace** swaps it in for the circled points, **Add below** adds just the new points under them, and any diagram goes into that section. Your own notes are never changed by it.
@@ -23,7 +23,7 @@ Everything (circles, ink, threads, Halo's read of each document, your handwritin
 
 ```text
 Halo/
-  HaloApp.swift          Library, the studio screen (page + floating pill + bottom bar), welcome overlay
+  HaloApp.swift          Library, the studio screen (page + HaloMargin + bottom bar), welcome overlay
   StudyStore.swift       State machine: circles → listening → asking → ink + voice; digest; learner profile; launch script
   PDFReader.swift        PDFKit with per-page overlays: Pencil lasso, thread hit-testing, PencilKit notes, pill anchoring
   MarginInk.swift        Ink engine: note layout from font outlines (stroke-animated), sketches, images; on-page circles, note tabs, hotspots
@@ -36,6 +36,11 @@ Halo/
   Audio.swift            Dictation (with silence auto-send) and step audio playback
   PDFCapture.swift       Page + crop images for the model, with the student's circle drawn on
   SampleLesson.swift     Offline sample PDF, canned answers and document map
+  Dive.swift             "Go deeper": Halo leaves the page and looks the question up on the live web
+  TutorAvatar.swift      Halo the lesson tutor's avatar: mood, face, glow and motion
+  Lesson.swift           LessonCoach: one coach owns the lesson between presentations (hook, build, check)
+  Design.swift           Shared look: dotted desk paper, coral ring, serif titles, handwriting, sticky notes
+  Signing.xcconfig       Shared signing defaults (DEVELOPMENT_TEAM, PRODUCT_BUNDLE_IDENTIFIER)
 Sources/HaloCore/        Models (sessions, lasso, learner profile, document map), repository, SSE client, digest client
 ```
 
@@ -44,11 +49,15 @@ Sources/HaloCore/        Models (sessions, lasso, learner profile, document map)
 The app accepts launch arguments so a demo can run without touching the screen (also how it was verified on the simulator):
 
 ```sh
-xcrun simctl launch <udid> dev.halo.ipad --sample --live --page 2 \
+xcrun simctl launch <udid> com.joyshah.halo --sample --live --page 2 \
   --circle 0.07,0.60,0.31,0.06 --ask "Where does this 2x come from?"
 ```
 
+`com.joyshah.halo` is the default bundle ID from `Halo/Signing.xcconfig`; a developer with a `Halo/Signing.local.xcconfig` override uses that ID instead.
+
 `--sample` opens the sample lesson (`--open /path/to.pdf` opens any PDF on the simulator's host; `--panel chapters|notes`, `--search "text"` and `--close` drive the new panels), `--live` uses the real server instead of canned answers, `--page N` jumps there after the welcome, `--circle x,y,w,h` (normalized) stands in for a Pencil stroke, `--ask` types and sends a question, `--stay` leaves the welcome card open.
+
+Other flags, read in `HaloApp.swift` and `StudyStore.swift`: `--settings` opens Settings; `--sideways` forces the landscape margin layout; `--tool write` selects the Write tool; `--write "line|line" [--at x,y] [--gap seconds]` writes lines by hand; `--dive "question" [--dive-play]` opens the web board from the start screen; `--quick-note "line|line" [--enhance]` and `--notebook "line|line" [--enhance]` write a note; `--notebook-ink "2x + 3 = 7|2x = 4" [--enhance] [--mine] [--refine "ask"] [--keep]` writes a handwritten note; `--select "text" --refine "ask"` asks about a typed selection in a quick note; `--circle-enhanced "ask" [--apply replace|below]` circles the first enhanced section; `--recap` opens the session summary.
 
 ## Open and run
 
@@ -82,19 +91,7 @@ API keys stay in `server/.env`. A live question sends a rendered current-page im
 
 ## Project map
 
-```text
-Halo/                       SwiftUI application and native platform adapters
-  HaloApp.swift             Library, import flow, adaptive workspace
-  StudyStore.swift          Conversation, persistence, cancellation, request orchestration
-  PDFReader.swift           Per-page PDFKit overlays, PencilKit, crop selection, pins
-  PDFCapture.swift          Page/crop images and handwriting composition
-  ConversationPane.swift    Chat, handwritten notes, images, sandboxed SVG diagrams
-  Audio.swift               Dictation and cancellable step-by-step audio playback
-  SampleLesson.swift        Generated sample PDF and clearly labelled offline answers
-  SettingsView.swift        Server connection and study preferences
-Sources/HaloCore/           Shared Codable models, local repository, HTTP/SSE client
-Tests/HaloCoreTests/         Executable checks, including mocked URLSession transport
-```
+The files are listed in the project map above.
 
 The local library is stored in Application Support/Halo. Documents have stable UUIDs; notes are versioned JSON with per-page normalized top-left crop coordinates and PencilKit drawing data. Images and TTS clips used for answers are not written as separate media files; generated diagram/image content is retained in the saved messages. Reimporting a PDF creates a separate library copy.
 
@@ -161,7 +158,7 @@ Each concept ends with a short open question or a choice. Type, dictate (then se
 
 Closing the workspace keeps the current lesson available while this document remains open in the app. Active graph checkpoints are held in server memory: restarting the server or reopening the app requires a fresh lesson. Saved notebook notes remain available. Interrupted answer requests can be recovered without advancing twice. Live lessons require a PDF text layer and a chapter of up to 120 pages; image-only scans need OCR before importing. The offline calculus sample includes a clearly labelled scripted lesson; imported books require live mode.
 
-Simulator smoke test (the current project bundle ID is `com.joyshah.halo`):
+Simulator smoke test (bundle ID `com.joyshah.halo` is the default from `Halo/Signing.xcconfig`, overridden by `Halo/Signing.local.xcconfig` when present):
 
 ```sh
 xcrun simctl launch <udid> com.joyshah.halo --sample --lesson --silent

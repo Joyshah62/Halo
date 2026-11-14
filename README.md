@@ -90,7 +90,7 @@ Ink primitives: `text`, `arrow` (to `circled` | `previous`), `underline`, `box`,
 - `point` (iPad only, sent with `pointing: true`): `{"type":"point","quote":"<exact page text>","style":"highlight"|"underline"|"circle"}` marks printed text on the PDF page while that step is spoken, then fades. The checker uses `{"type":"point","line":n}` to underline the line a hint sends the student back to.
 - `image`: for genuinely complex things (3-D structures, mechanisms). The server generates a whiteboard-style illustration with `gemini-2.5-flash-image` (about 5 s) while the previous step is still being spoken, then it appears beside the spoken explanation.
 
-Voice: the first step is synthesized with a low-latency model (`eleven_turbo_v2_5`) so the answer starts fast; later steps use `eleven_v3`, the most natural model, generated in the background while step 1 plays. The prompt makes the tutor talk like a person sitting next to you (contractions, "this 2x right here", no "Great question"), and the server strips any LaTeX before it is spoken.
+Voice: every step is synthesized with one model (`ELEVENLABS_MODEL_ID`, default `eleven_multilingual_v2`), so the voice never changes mid-answer. Each step gets its own clip, generated as the step arrives and played in order, so step 1 plays while later steps are still being written. The prompt makes the tutor talk like a person sitting next to you (contractions, "this 2x right here", no "Great question"), and the server strips any LaTeX before it is spoken.
 
 ## Halo watches you work (`POST /api/check`)
 
@@ -108,7 +108,7 @@ read ──► verify ──► every step checks out ────────�
 
 Request: `{ image (base64), imageMime, problem?, pageText?, learner? }`. Response is SSE: `stage` per node, then `verdict` (`status`: `correct` | `wrong` | `unsure` | `nothing`, plus `line`, `box` as `{x, y, w, h}` in 0–1 of the image, `kind`, `concept`, every transcribed line with its box, and the tool results), then `meta` + `step` in the same shape as `/api/ask` when there is a hint, then `done`. Caught mistakes are logged to the confusion map.
 
-`HALO_MOCK=1` serves a canned chain-rule mistake through the same graph. `npm test` in `server/` runs the math checker's tests. Set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` to see each run as a trace.
+`HALO_MOCK=1` serves a canned chain-rule mistake through the same graph. `npm test` in `server/` runs every `*.test.mjs`: the math checker (`mathcheck.test.mjs`), the lesson agent (`lesson.test.mjs`) and lesson source material (`lesson-material.test.mjs`). Set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` to see each run as a trace.
 
 ## Chapter tutor on iPad
 
@@ -121,15 +121,14 @@ The server exposes `POST /api/lesson/start` with `{ title, chapter, pages: [{ pa
 | Var | Default | Notes |
 |---|---|---|
 | `HALO_PROVIDER` | `gemini` | or `claude` |
-| `GEMINI_API_KEY` | — | required unless `HALO_MOCK=1` or provider is claude |
+| `GEMINI_API_KEY` | — | required unless `HALO_MOCK=1`; still used for `/api/check` and web lookup when provider is claude |
 | `HALO_MODEL` | `gemini-3.5-flash` | any Gemini vision model; `claude-opus-5-5` when provider is claude |
 | `GEMINI_THINKING_LEVEL` | `minimal` | Gemini 3+ thinking depth (`minimal`, `low`, `medium`, `high`) |
 | `GEMINI_THINKING_BUDGET` | `0` | Gemini 2.x only |
 | `ANTHROPIC_API_KEY` | — | only for `HALO_PROVIDER=claude` |
 | `ELEVENLABS_API_KEY` | — | empty → browser speech synthesis fallback |
-| `ELEVENLABS_VOICE_ID` | `Xb7hH8MSUJpSbSDYk0k2` | "Alice – Clear, Engaging Educator" |
-| `ELEVENLABS_MODEL_ID` | `eleven_v3` | natural voice for steps 2+ (about 4 s per clip, pipelined) |
-| `ELEVENLABS_FAST_MODEL_ID` | `eleven_turbo_v2_5` | first step, about 0.5 s |
+| `ELEVENLABS_VOICE_ID` | `VrUPKj92idNr4XrmO032` | "Hailey", a calm conversational voice |
+| `ELEVENLABS_MODEL_ID` | `eleven_multilingual_v2` | one model for every step, so the voice never changes mid-answer |
 | `GEMINI_IMAGE_MODEL` | `gemini-2.5-flash-image` | illustrations for the `image` primitive |
 | `HALO_MOCK` | `0` | `1` = canned answers, no API calls |
 
