@@ -24,6 +24,8 @@ struct NotebookView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .background(DeskPaper().ignoresSafeArea())
+            // Halo sits in the corner of the notebook too: quiz me, improve this note, ask about my notes.
+            .overlay(alignment: .bottomTrailing) { NotesHalo(store: store).padding(.trailing, 20).padding(.bottom, 18) }
             .navigationTitle(store.notebookIsLoose ? "Quick notes" : "My notes").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
@@ -35,6 +37,7 @@ struct NotebookView: View {
             }
         }
         .diveBoard(store)
+        .fullScreenCover(isPresented: Binding(get: { store.showQuiz }, set: { if !$0 { store.closeQuiz() } })) { QuizView(store: store) }
     }
 
     private var list: some View {
@@ -773,4 +776,111 @@ private struct SelectableEditor: UIViewRepresentable {
 
 private extension String {
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
+
+/// Halo in the notebook: the avatar in the corner and, when tapped, what it can do with the notes.
+@MainActor
+private struct NotesHalo: View {
+    @ObservedObject var store: StudyStore
+    @State private var question = ""
+    @FocusState private var asking: Bool
+
+    private var open: NotebookEntry? { store.openNote.flatMap { $0.isEmpty ? nil : $0 } }
+    private var cue: TutorCue {
+        var cue = store.haloCue
+        if store.notesBusy || store.enhancingNote != nil { cue.base = .thinking }
+        return cue
+    }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 12) {
+            if let reply = store.notesReply { bubble(reply).transition(.scale(scale: 0.8, anchor: .bottomTrailing).combined(with: .opacity)) }
+            else if store.notesBusy {
+                HStack(spacing: 10) { HaloRing(size: 18, working: true); Text("looking through your notes").font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink) }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(Color.white, in: Capsule()).shadow(color: .black.opacity(0.1), radius: 10, y: 4)
+                    .transition(.opacity)
+            }
+            if store.showNotesHalo && store.notesReply == nil && !store.notesBusy { menu.transition(.scale(scale: 0.9, anchor: .bottomTrailing).combined(with: .opacity)) }
+            avatar
+        }
+        .frame(maxWidth: 440, alignment: .trailing)
+    }
+
+    private var avatar: some View {
+        Button { asking = false; store.toggleNotesHalo() } label: {
+            TutorAvatar(cue: cue, size: 96, voiceLevel: { [store] in store.player.outputLevel })
+                .offset(y: -4).frame(width: 74, height: 74)
+                .background(Color.white, in: Circle())
+                .overlay(Circle().stroke(HaloStyle.coral.opacity(store.showNotesHalo ? 0.7 : 0.18), lineWidth: 2))
+                .shadow(color: .black.opacity(0.16), radius: 14, y: 6)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(store.showNotesHalo ? "Close Halo’s menu" : "Halo. Quiz me, improve this note, ask about my notes")
+    }
+
+    private var menu: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Eyebrow("Halo", color: HaloStyle.coral)
+                    Text("What should we do?").font(HaloKit.title(23)).foregroundStyle(HaloStyle.text)
+                }
+                Spacer(minLength: 8)
+                CloseButton(label: "Close Halo’s menu") { store.toggleNotesHalo() }
+            }
+            tile("checklist", "Quiz me on this note", open.map { "from “\($0.displayTitle)”" } ?? "open a note with something in it", HaloStyle.coral, enabled: open != nil) {
+                store.startQuiz(allNotes: false)
+            }
+            if store.quizzableNotes.count > 1 {
+                tile("square.stack.3d.up", "Quiz me on all my notes", "\(store.quizzableNotes.count) notes", HaloStyle.ink, enabled: true) { store.startQuiz(allNotes: true) }
+            }
+            tile("sparkles", open?.enhanced == nil ? "Improve this note" : "Improve it again", "organized, filled in, a diagram if it helps", HaloKit.amber,
+                 enabled: open != nil && store.enhancingNote == nil) {
+                if let id = open?.id { store.toggleNotesHalo(); store.enhanceNote(id) }
+            }
+            HaloComposer(text: $question, prompt: "Ask about your notes…", focus: $asking) {
+                let asked = question; question = ""; asking = false; store.askNotes(asked)
+            }
+        }
+        .padding(16).frame(width: 400)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
+    }
+
+    private func tile(_ icon: String, _ title: String, _ note: String, _ tint: Color, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon).font(.system(size: 16, weight: .medium)).foregroundStyle(tint)
+                    .frame(width: 38, height: 38).background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).font(HaloKit.text(15.5, .semibold)).foregroundStyle(HaloStyle.text)
+                    Text(note).font(HaloKit.hand(20)).foregroundStyle(HaloStyle.ink).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+            .background(HaloStyle.paper, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .opacity(enabled ? 1 : 0.45).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).disabled(!enabled)
+    }
+
+    private func bubble(_ reply: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Eyebrow("Halo", color: HaloStyle.coral)
+                Spacer()
+                Button { store.toggleNotesHalo() } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).foregroundStyle(.secondary).frame(width: 28, height: 28) }
+                    .buttonStyle(.plain).accessibilityLabel("Close")
+            }
+            Text(reply).font(HaloKit.text(16.5)).foregroundStyle(HaloStyle.text).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+            Button { withAnimation(.spring(duration: 0.3)) { store.notesReply = nil } } label: {
+                Label("Ask something else", systemImage: "bubble.left").font(HaloKit.text(13.5, .semibold)).foregroundStyle(HaloStyle.ink)
+            }.buttonStyle(.plain)
+        }
+        .padding(16).frame(width: 400, alignment: .leading)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.16), radius: 20, y: 8)
+    }
 }

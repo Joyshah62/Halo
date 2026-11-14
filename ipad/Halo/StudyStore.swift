@@ -25,6 +25,14 @@ protocol ReaderControlling: AnyObject {
 final class StudyStore: ObservableObject {
     let lesson = LessonCoach()
     @Published var showLesson = false
+    /// "Quiz me on my notes", opened from Halo in the notebook.
+    let quizCoach = QuizCoach()
+    @Published var showQuiz = false
+    /// Halo in the notebook: its menu, and its spoken answer to a question about the notes.
+    @Published var showNotesHalo = false
+    @Published var notesReply: String?
+    @Published var notesBusy = false
+    private var notesTask: Task<Void, Never>?
     // Library
     @Published var documents: [LibraryDocument] = []
     @Published var document: LibraryDocument?
@@ -177,12 +185,15 @@ final class StudyStore: ObservableObject {
     }
     /// "Sup Halo" is only listened for on the bare page: not while a conversation, lesson, summary or notebook is open.
     var wakeAllowed: Bool {
-        wakeWord && pdf != nil && pill == .hidden && !showLesson && !showRecap && !showNotebook && dive == nil && refine == nil
+        guard wakeWord, !showLesson, !showRecap, !showQuiz, dive == nil, refine == nil else { return false }
+        // In the notebook Halo helps with the notes; on the page, with the page.
+        return showNotebook ? !notesBusy : pdf != nil && pill == .hidden
     }
     /// "Sup Halo" on its own starts a spoken question about this page; anything said after it goes straight to Halo.
     private func heardWakeWord(_ rest: String) {
         guard wakeAllowed else { return }
         haloAwakeAt = Date()
+        if showNotebook { heardInNotebook(rest); return }
         withAnimation(.spring(duration: 0.3)) { showDock = false; showLauncher = false }
         showNavigator = false
         if rest.isEmpty { askAboutPage(pageIndex) } else { askHalo(rest) }
@@ -245,9 +256,9 @@ final class StudyStore: ObservableObject {
     func open(_ item: LibraryDocument) async {
         guard let repository else { return }
         let token = UUID(); openGeneration = token
-        // Offline sample answers belong to the sample document. They used to stay on after it, so a question about
-        // your own slides got the canned chain-rule answer. (Launch scripts set the mode themselves.)
-        if !scripted { demoMode = item.name == "A little calculus" }
+        // Every document, the sample included, talks to the live server. Offline sample answers are only on when
+        // switched on in Settings, and only until the next document is opened. (Launch scripts set the mode themselves.)
+        if !scripted { demoMode = false }
         lesson.reset(); showLesson = false
         cancelAnswer(); speech.stop(); readTask?.cancel(); stopWatching(); await flush()
         if !notebookIsLoose { enhanceTask?.cancel(); enhancingNote = nil; drawingPictures = []; noteID = nil; showNotebook = false }
@@ -311,7 +322,6 @@ final class StudyStore: ObservableObject {
     func openSample() async {
         do {
             let url = try SampleLesson.create()
-            demoMode = true
             await importPDF(url)
             try? FileManager.default.removeItem(at: url)
         } catch { self.error = error.localizedDescription }
@@ -446,6 +456,7 @@ final class StudyStore: ObservableObject {
     }
     func closeNotebook() {
         showNotebook = false; noteError = nil
+        notesTask?.cancel(); notesBusy = false; showNotesHalo = false; notesReply = nil
         // A note that never got a word is not worth keeping.
         if entries(notebookIsLoose)?.contains(where: \.isEmpty) == true { modify(notebookIsLoose) { list, _ in list.removeAll(where: \.isEmpty) } }
         noteID = nil
@@ -867,6 +878,105 @@ final class StudyStore: ObservableObject {
     private func updateSession(_ update: (inout StudySession) -> Void) {
         guard let index = notes.sessions.firstIndex(where: { $0.id == selectedSessionID }) else { return }
         update(&notes.sessions[index]); saveLater()
+    }
+
+    // MARK: - Halo in the notebook
+    /// The notes a quiz or a question works from: one note, or every note in this notebook that has something in it.
+    /// Halo's enhanced version goes with the student's own words when there is one.
+    private func notesPayload(_ chosen: [NotebookEntry]) -> [NotesPayload] {
+        chosen.compactMap { entry in
+            var text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let enhanced = entry.enhanced { text += (text.isEmpty ? "" : "\n\n") + "Halo’s enhanced version of these notes:\n" + enhanced.plainText }
+            let kept = (entry.refinements ?? []).flatMap { $0.points.map { "• \($0.text)" } }
+            if !kept.isEmpty { text += "\n" + kept.joined(separator: "\n") }
+            return text.isEmpty ? nil : NotesPayload(title: entry.displayTitle, text: text)
+        }
+    }
+    /// Notes worth quizzing on: written or drawn on.
+    var quizzableNotes: [NotebookEntry] { notebook.filter { !$0.isEmpty } }
+    func startQuiz(allNotes: Bool) {
+        let chosen = allNotes ? quizzableNotes : [openNote].compactMap { $0 }.filter { !$0.isEmpty }
+        guard !chosen.isEmpty else { noteError = "Write something in this note first, then Halo can quiz you on it."; return }
+        // A handwritten note is read from a picture of it (only when quizzing on that one note).
+        let image = allNotes ? nil : Self.inkImage(chosen[0].drawing)
+        let notes = notesPayload(chosen)
+        guard !notes.isEmpty || image != nil else { noteError = "Write something in this note first, then Halo can quiz you on it."; return }
+        let loose = notebookIsLoose, document = loose ? "" : displayTitle
+        let scope = allNotes ? (chosen.count == 1 ? "your note" : "all \(chosen.count) notes") : "this note"
+        dismissRefine(); player.stop(); notesTask?.cancel(); notesBusy = false
+        withAnimation(.spring(duration: 0.3)) { showNotesHalo = false; notesReply = nil }
+        Task { [weak self] in
+            guard let self else { return }
+            let request = QuizRequest(notes: notes, document: document, image: image, learner: await notesLearner())
+            // The sample document's offline mode has a quiz of its own; quick notes always go to the server.
+            quizCoach.start(request, scope: scope, server: serverURL, voice: voiceOut, demo: demoMode && !loose)
+            showQuiz = true
+        }
+    }
+    func closeQuiz() { quizCoach.close(); showQuiz = false }
+    /// A question about the notes, answered aloud in a bubble by Halo.
+    func askNotes(_ question: String) {
+        let asked = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !asked.isEmpty else { return }
+        let notes = notesPayload(quizzableNotes), document = notebookIsLoose ? "" : displayTitle, server = serverURL
+        let offline = demoMode && !notebookIsLoose
+        notesTask?.cancel(); player.stop()
+        withAnimation(.spring(duration: 0.3)) { notesBusy = true; notesReply = nil; showNotesHalo = true }
+        notesTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let answer: NotesAnswer
+                if offline {
+                    try await Task.sleep(for: .seconds(0.8))
+                    answer = NotesAnswer(say: "Your notes say the chain rule multiplies the outside’s derivative by the inside’s. That’s where the two x comes from.", audio: nil)
+                } else {
+                    answer = try await client.askNotes(NotesQuestion(question: asked, notes: notes, document: document, learner: await notesLearner()), server: server)
+                }
+                guard !Task.isCancelled else { return }
+                withAnimation(.spring(duration: 0.35)) { notesBusy = false; notesReply = answer.say }
+                react(.happy, seconds: 1.2)
+                if voiceOut { try? await player.play(AnswerStep(index: 0, say: answer.say, audio: answer.audio)) }
+            } catch {
+                guard !Task.isCancelled else { return }
+                withAnimation { notesBusy = false; notesReply = "I couldn’t reach my server just now. Check it in Settings and ask me again." }
+            }
+        }
+    }
+    func toggleNotesHalo() {
+        haloAwakeAt = Date()
+        withAnimation(.spring(duration: 0.35, bounce: 0.2)) { showNotesHalo.toggle(); if !showNotesHalo { notesReply = nil } }
+        if !showNotesHalo { notesTask?.cancel(); notesBusy = false; player.stop() }
+    }
+    /// "Sup Halo" in the notebook: on its own it opens Halo's menu; "quiz me" starts a quiz; anything else is a question about the notes.
+    private func heardInNotebook(_ rest: String) {
+        let said = rest.lowercased()
+        if rest.isEmpty { react(.wink, seconds: 1.1); withAnimation(.spring(duration: 0.35, bounce: 0.2)) { showNotesHalo = true } }
+        else if said.range(of: #"\b(quiz|test) me\b"#, options: .regularExpression) != nil { startQuiz(allNotes: said.contains("all")) }
+        else if said.range(of: #"\b(enhance|improve|tidy|clean up)\b"#, options: .regularExpression) != nil, let id = noteID { enhanceNote(id) }
+        else { askNotes(rest) }
+    }
+
+    /// `--notes-halo` opens Halo's menu in the notebook; `--notes-ask "…"` asks it about the notes;
+    /// `--quiz [all]` starts a quiz, and `--quiz-answers "1|inside|2"` answers its questions in turn (a number picks an option).
+    private func scriptNotesHalo(_ value: (String) -> String?) async {
+        let args = CommandLine.arguments
+        try? await Task.sleep(for: .seconds(0.8))
+        if args.contains("--notes-halo") { withAnimation { showNotesHalo = true } }
+        if let asked = value("--notes-ask") { askNotes(asked) }
+        guard args.contains("--quiz") else { return }
+        startQuiz(allNotes: value("--quiz") == "all")
+        let answers = (value("--quiz-answers") ?? "").split(separator: "|").map(String.init)
+        for (n, answer) in answers.enumerated() {
+            while quizCoach.stage != .asking { try? await Task.sleep(for: .milliseconds(150)) }
+            try? await Task.sleep(for: .seconds(1.5))
+            if let option = Int(answer), quizCoach.question?.isChoice == true { quizCoach.pick(option) }
+            else if answer == "?" { quizCoach.reveal() }
+            else { quizCoach.draft = answer; quizCoach.submit() }
+            while quizCoach.stage == .marking { try? await Task.sleep(for: .milliseconds(150)) }
+            try? await Task.sleep(for: .seconds(1.5))
+            // The last answer stays on screen to be looked at, unless `--quiz-finish` asks for the results.
+            if n + 1 < answers.count || args.contains("--quiz-finish") { quizCoach.next() }
+        }
     }
 
     // MARK: - Voice in (hands-free)
@@ -1548,6 +1658,7 @@ final class StudyStore: ObservableObject {
                     if let ask = value("--refine"), !ask.isEmpty { try? await Task.sleep(for: .seconds(0.6)); runRefine(ask) }
                 }
             }
+            await scriptNotesHalo(value)
             return
         }
         guard args.contains("--sample") || value("--open") != nil else { return }
@@ -1556,7 +1667,7 @@ final class StudyStore: ObservableObject {
             demoMode = !args.contains("--live")
             let name = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
             if let existing = documents.first(where: { $0.name == name }) { await open(existing) } else { await importPDF(URL(fileURLWithPath: path)) }
-        } else { await openSample() }
+        } else { demoMode = !args.contains("--live"); await openSample() }   // screenshot scripts stay offline unless `--live`
         if args.contains("--live") { demoMode = false; notes.map = nil; notes.welcomed = false; readDocument() }
         try? await Task.sleep(for: .seconds(args.contains("--live") ? 9 : 2.5))
         if args.contains("--stay") { return }
@@ -1640,6 +1751,7 @@ final class StudyStore: ObservableObject {
             // `--notebook "line one|line two" [--enhance]`: writes a note of your own, and has Halo enhance it.
             dismissPill(); openNotebook(); newNote()
             if let id = noteID { editNote(id, title: "", text: text.replacingOccurrences(of: "|", with: "\n")); if args.contains("--enhance") { enhanceNote(id) } }
+            await scriptNotesHalo(value)
         }
         else if let script = value("--notebook-ink") {
             // `--notebook-ink "2x + 3 = 7|2x = 4" [--enhance | --refine "check it"]`: the same, written by hand (digits, x and = + - ( ) only).

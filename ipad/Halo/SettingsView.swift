@@ -90,7 +90,7 @@ struct SettingsView: View {
                        : "This iPad can’t recognise speech on the device, so Halo won’t listen for its name. Tap Halo or the microphone instead.",
                    $store.wakeWord).disabled(!store.wake.supported)
             Divider().padding(.leading, 52)
-            option("airplane", HaloStyle.ink, "Offline sample answers", "Fixed answers from a calculus example. Turn this off to ask live questions about your own documents.", $store.demoMode)
+            option("airplane", HaloStyle.ink, "Offline sample answers", "Scripted answers for the calculus sample, for when there’s no connection. Off by default; it switches off again when you open another document.", $store.demoMode)
         }.haloCard()
     }
     private func option(_ icon: String, _ tint: Color, _ title: String, _ detail: String, _ value: Binding<Bool>) -> some View {

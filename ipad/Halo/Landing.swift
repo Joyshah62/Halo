@@ -142,25 +142,27 @@ struct LandingView: View {
             }.padding(.leading, 4)
             // As many across as fit whole (four on a 10.5-inch iPad), then onto the next row: no card is cut off by the edge.
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 166), spacing: 18, alignment: .top)], alignment: .leading, spacing: 28) {
-                ForEach(Array(store.documents.prefix(8).enumerated()), id: \.element.id) { index, item in
+                ForEach(Array(shelfItems.prefix(8).enumerated()), id: \.element.id) { index, item in
                     Button { Task { await store.open(item) } } label: { book(item, latest: index == 0, tilt: [-1.4, 1.1, -0.6, 1.6][index % 4]) }.buttonStyle(.plain)
                 }
             }.padding(.horizontal, 6).padding(.top, 14).padding(.bottom, 12)
         }
     }
-    /// A file name as a title: no extension, no underscores, and none of the "(z-library.sk, 1lib.sk)" a download site leaves behind.
-    private static func shelfTitle(_ name: String) -> String {
-        var title = name.replacingOccurrences(of: #"\.pdf$"#, with: "", options: [.regularExpression, .caseInsensitive])
-        title = title.replacingOccurrences(of: #"[(\[][^)\]]*(z-?lib|1lib|libgen|anna)[^)\]]*[)\]]"#, with: " ", options: [.regularExpression, .caseInsensitive])
-        title = title.replacingOccurrences(of: #"[_\s]+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-        return title.isEmpty ? name : title
+    /// Your documents, with the sample lesson only once however many times it was opened (newest copy).
+    private var shelfItems: [LibraryDocument] {
+        var sampleShown = false
+        return store.documents.filter { item in
+            guard item.name == "A little calculus" else { return true }
+            defer { sampleShown = true }
+            return !sampleShown
+        }
     }
     private func book(_ item: LibraryDocument, latest: Bool, tilt: Double) -> some View {
         Taped(tilt: tilt) {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: "book.pages").font(.system(size: 20)).foregroundStyle(HaloStyle.coral)
                     .frame(width: 42, height: 42).background(HaloStyle.coral.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                Text(Self.shelfTitle(item.name)).font(HaloKit.title(15.5, .semibold)).foregroundStyle(HaloStyle.text).lineLimit(5).minimumScaleFactor(0.85).multilineTextAlignment(.leading)
+                Text(item.displayName).font(HaloKit.title(15.5, .semibold)).foregroundStyle(HaloStyle.text).lineLimit(5).minimumScaleFactor(0.85).multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
                 Text("\(item.pageCount) pages").font(HaloKit.text(12)).foregroundStyle(.secondary)
                 Text(latest ? "continue →" : item.lastOpenedAt.formatted(.relative(presentation: .named))).font(HaloKit.hand(21)).foregroundStyle(latest ? HaloStyle.coral : HaloStyle.ink).lineLimit(1)

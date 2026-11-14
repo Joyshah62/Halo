@@ -158,6 +158,18 @@ public struct HaloClient: Sendable {
     public func refine(_ payload: RefineRequest, server: String) async throws -> RefineReply {
         try await post("api/notes/refine", payload, server: server, timeout: 60)
     }
+    /// A quiz written from the student's notes, each question with its voice.
+    public func quiz(_ payload: QuizRequest, server: String) async throws -> Quiz {
+        try await post("api/notes/quiz", payload, server: server, timeout: 120)
+    }
+    /// Marks one short answer in a quiz.
+    public func grade(_ payload: QuizGradeRequest, server: String) async throws -> QuizGrade {
+        try await post("api/notes/grade", payload, server: server, timeout: 45)
+    }
+    /// A question about the student's own notes, answered aloud.
+    public func askNotes(_ payload: NotesQuestion, server: String) async throws -> NotesAnswer {
+        try await post("api/notes/ask", payload, server: server, timeout: 60)
+    }
     /// One diagram for a section of enhanced notes: image bytes, or nil if none could be drawn.
     public func noteImage(_ prompt: String, server: String) async throws -> Data? {
         struct Ask: Encodable { let prompt: String }

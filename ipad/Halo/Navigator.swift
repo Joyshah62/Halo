@@ -209,7 +209,8 @@ struct NavigatorView: View {
                 ToolbarItem(placement: .principal) {
                     Picker("Show", selection: $store.navigatorTab) {
                         Text("Chapters").tag(NavigatorTab.chapters)
-                        Text(notes.isEmpty ? "Notes" : "Notes (\(notes.count))").tag(NavigatorTab.notes)
+                        // "Halo’s answers", not "Notes": your own notes are "My notes" in the top bar.
+                        Text(notes.isEmpty ? "Halo’s answers" : "Halo’s answers (\(notes.count))").tag(NavigatorTab.notes)
                     }.pickerStyle(.segmented).frame(width: 240)
                 }
             }

@@ -24,6 +24,7 @@
 		A1B2C3D4E5F60718293A4C0A /* Notebook.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4C09 /* Notebook.swift */; };
 		A1B2C3D4E5F60718293A4D0A /* Landing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4D09 /* Landing.swift */; };
 		C0FFEE0000000000000000A1 /* Companion.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE0000000000000000A2 /* Companion.swift */; };
+		C0FFEE0000000000000000C1 /* Quiz.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE0000000000000000C2 /* Quiz.swift */; };
 		A1B2C3D4E5F60718293A4E0A /* Dive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4E09 /* Dive.swift */; };
 		A1B2C3D4E5F60718293A4F0A /* Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4F09 /* Design.swift */; };
 		A1B2C3D4E5F60718293A4B08 /* Navigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B07 /* Navigator.swift */; };
@@ -51,6 +52,7 @@
 		A1B2C3D4E5F60718293A4C09 /* Notebook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notebook.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4D09 /* Landing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Landing.swift; sourceTree = "<group>"; };
 		C0FFEE0000000000000000A2 /* Companion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Companion.swift; sourceTree = "<group>"; };
+		C0FFEE0000000000000000C2 /* Quiz.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Quiz.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4E09 /* Dive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dive.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4F09 /* Design.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B07 /* Navigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigator.swift; sourceTree = "<group>"; };
@@ -89,6 +91,7 @@
 				A1B2C3D4E5F60718293A4C09 /* Notebook.swift */,
 				A1B2C3D4E5F60718293A4D09 /* Landing.swift */,
 				C0FFEE0000000000000000A2 /* Companion.swift */,
+				C0FFEE0000000000000000C2 /* Quiz.swift */,
 				A1B2C3D4E5F60718293A4E09 /* Dive.swift */,
 				A1B2C3D4E5F60718293A4F09 /* Design.swift */,
 				A1B2C3D4E5F60718293A4B07 /* Navigator.swift */,
@@ -224,6 +227,7 @@
 				A1B2C3D4E5F60718293A4C0A /* Notebook.swift in Sources */,
 				A1B2C3D4E5F60718293A4D0A /* Landing.swift in Sources */,
 				C0FFEE0000000000000000A1 /* Companion.swift in Sources */,
+				C0FFEE0000000000000000C1 /* Quiz.swift in Sources */,
 				A1B2C3D4E5F60718293A4E0A /* Dive.swift in Sources */,
 				A1B2C3D4E5F60718293A4F0A /* Design.swift in Sources */,
 				A1B2C3D4E5F60718293A4B08 /* Navigator.swift in Sources */,

@@ -14,6 +14,7 @@ import { learnerKey, recordTopics } from "./learner-memory.js";
 import * as web from "./web.js";
 import { cleanStep, despeak, prepareStep } from "./steps.js";
 import { startLesson, continueLesson } from "./lesson.js";
+import { installNotesQuiz } from "./notes-quiz.js";
 
 const PORT = Number(process.env.PORT || 8787);
 installProcessLogging();
@@ -464,6 +465,8 @@ app.post("/api/notes/refine", async (req, res) => {
   }
 });
 
+// Quiz me on my notes, mark a short answer, ask about my notes (notes-quiz.js).
+installNotesQuiz(app);
 // POST /api/notes/image → { image: { mime, data (base64) } | null }: one diagram for a section of enhanced notes.
 app.post("/api/notes/image", async (req, res) => {
   const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim().slice(0, 300) : "";

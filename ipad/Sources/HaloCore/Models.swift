@@ -627,3 +627,79 @@ public struct LessonMaterial: Codable, Equatable, Sendable {
     public var n: Int; public var anchor: LessonAnchor; public var headline: String; public var status: String
     public var visual: LessonVisual?; public var example: LessonExample?; public var web: LessonWeb?; public var images: [DiveImage]
 }
+
+// MARK: Quiz me on my notes
+/// The notes a quiz (or a question) is written from: the student's own words, plus Halo's enhanced version when there is one.
+public struct NotesPayload: Encodable, Equatable, Sendable {
+    public var title: String
+    public var text: String
+    public init(title: String, text: String) { self.title = String(title.prefix(80)); self.text = String(text.prefix(12000)) }
+}
+public struct QuizRequest: Encodable, Sendable {
+    public var notes: [NotesPayload]
+    public var document: String
+    /// The handwritten part of a single note, as a base64 JPEG.
+    public var image: String?
+    public var learner: LearnerProfile?
+    public init(notes: [NotesPayload], document: String, image: String? = nil, learner: LearnerProfile? = nil) {
+        self.notes = notes; self.document = document; self.image = image
+        self.learner = learner.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+public struct Quiz: Codable, Equatable, Sendable {
+    public var title: String
+    public var questions: [QuizQuestion]
+    public init(title: String, questions: [QuizQuestion]) { self.title = title; self.questions = questions }
+}
+public struct QuizQuestion: Codable, Equatable, Identifiable, Sendable {
+    public var id = UUID()
+    /// "choice" (marked on the iPad) or "short" (marked by the server).
+    public var kind: String
+    public var ask: String
+    public var options: [String]
+    /// The right option, for a choice question.
+    public var answer: Int
+    /// What a right short answer contains.
+    public var expected: String
+    public var explain: String
+    /// The line of the student's notes this question tests.
+    public var source: String
+    /// The question spoken (base64 mp3), when the server has a voice.
+    public var audio: String?
+    public var isChoice: Bool { kind == "choice" && options.indices.contains(answer) }
+    enum CodingKeys: String, CodingKey { case kind, ask, options, answer, expected, explain, source, audio }
+    public init(kind: String, ask: String, options: [String] = [], answer: Int = 0, expected: String = "", explain: String, source: String, audio: String? = nil) {
+        self.kind = kind; self.ask = ask; self.options = options; self.answer = answer; self.expected = expected
+        self.explain = explain; self.source = source; self.audio = audio
+    }
+}
+public struct QuizGradeRequest: Encodable, Sendable {
+    public var ask: String
+    public var expected: String
+    public var source: String
+    public var answer: String
+    public init(question: QuizQuestion, answer: String) {
+        ask = question.ask; expected = question.expected; source = question.source; self.answer = String(answer.prefix(600))
+    }
+}
+public struct QuizGrade: Decodable, Equatable, Sendable {
+    /// "right", "almost" or "wrong".
+    public var verdict: String
+    public var say: String
+    public var audio: String?
+    public init(verdict: String, say: String, audio: String? = nil) { self.verdict = verdict; self.say = say; self.audio = audio }
+}
+public struct NotesQuestion: Encodable, Sendable {
+    public var question: String
+    public var notes: [NotesPayload]
+    public var document: String
+    public var learner: LearnerProfile?
+    public init(question: String, notes: [NotesPayload], document: String, learner: LearnerProfile? = nil) {
+        self.question = String(question.prefix(300)); self.notes = notes; self.document = document
+        self.learner = learner.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+public struct NotesAnswer: Decodable, Equatable, Sendable {
+    public var say: String
+    public var audio: String?
+}
