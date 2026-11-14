@@ -188,3 +188,13 @@ Run extension checks with `cd extension && npm run typecheck && npm test && npm 
 4. Switch to an article → **Whole page** → “Explain the main idea.”
 5. Tutor mode on → crop a wrong homework step → Halo writes a hint.
 6. End on the confusion map.
+
+### Import PowerPoint and Word on iPad
+
+The iPad app accepts `.ppt`, `.pptx`, `.doc`, `.docx`, and PDF. Office files are converted to PDF by your Halo server, then saved locally for the same reader, annotations, search, and lesson tools. Install LibreOffice on the server and restart it; see [Office import setup](ipad/README.md#powerpoint-and-word-imports). PDF import works offline; Office conversion requires the server and accepts files up to 25 MB.
+
+### Server diagnostics
+
+Requests, stream progress, errors, disconnects, process exits, and restarts are recorded in `server/logs/server.jsonl` (gitignored). Follow them with `tail -f server/logs/server.jsonl`; override the folder with `HALO_LOG_DIR`. Every request has an `X-Halo-Request-ID` response header. Progress logs include the question ID and stage, without logging screenshots or document text. Development mode preserves terminal output across restarts. For a device demo, use `npm start` so editing source files cannot restart the server in the middle of a question or lesson.
+
+Lesson checkpoints and completed retry responses are saved in `server/lessons.sqlite` (gitignored), so a restart between turns does not lose the lesson or apply the same reply twice. Set `HALO_LESSON_DB_PATH` to choose its location. Lessons started before this persistence update must be restarted once.
