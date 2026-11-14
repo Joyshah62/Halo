@@ -20,6 +20,8 @@ public enum AskEvent: Equatable, Sendable {
     case step(AnswerStep)
     /// Only from /api/check: what Halo made of the student's working.
     case verdict(CheckVerdict)
+    /// Only from /api/stuck: the deep agent's plan, what it is doing, and what it found.
+    case agent(AgentEvent)
     case done
     case failure(String)
 }
@@ -84,6 +86,14 @@ public struct EventDecoder: Sendable {
             case "finish": return .lesson(.finish(try decoder.decode(LessonSummary.self, from: bytes)))
             case "start": return .start(try decoder.decode(Start.self, from: bytes).id ?? 0)
             case "verdict": return .verdict(try decoder.decode(CheckVerdict.self, from: bytes))
+            case "todos":
+                struct Plan: Decodable { let todos: [AgentTodo] }
+                return .agent(.todos(try decoder.decode(Plan.self, from: bytes).todos))
+            case "stage":
+                // /api/check also sends stages, without anything to show.
+                struct Stage: Decodable { let say: String? }
+                return try decoder.decode(Stage.self, from: bytes).say.map { .agent(.stage($0)) }
+            case "diagnosis": return .agent(.diagnosis(try decoder.decode(StuckDiagnosis.self, from: bytes)))
             case "meta": let meta = try decoder.decode(Meta.self, from: bytes); return .meta(mode: meta.mode, topic: meta.topic)
             case "step": return .step(try decoder.decode(AnswerStep.self, from: bytes))
             case "done": return .done
@@ -209,6 +219,10 @@ public struct HaloClient: Sendable {
     /// "Halo watches you work": sends an image of the student's working; a verdict comes back, then a hint if it is wrong.
     public func check(_ payload: CheckRequest, server: String) -> AsyncThrowingStream<AskEvent, Error> {
         stream("api/check", payload, server: server, timeout: 60)
+    }
+    /// "Why am I stuck?": a deep agent searches the student's book for the idea behind a caught mistake.
+    public func stuck(_ payload: StuckRequest, server: String) -> AsyncThrowingStream<AskEvent, Error> {
+        stream("api/stuck", payload, server: server, timeout: 120)
     }
     private func stream<Payload: Encodable & Sendable>(_ path: String, _ payload: Payload, server: String, timeout: TimeInterval) -> AsyncThrowingStream<AskEvent, Error> {
         AsyncThrowingStream { continuation in

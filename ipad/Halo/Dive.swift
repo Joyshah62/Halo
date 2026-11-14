@@ -5,6 +5,10 @@ import SafariServices
 // "Go deeper": Halo leaves the page and looks the question up on the live web. The board fills in
 // as things arrive: what it searched for, an explanation with numbered sources, a video it has
 // actually watched (so it can skip to the part that answers the question), and real pictures.
+//
+// It is also a way down. Halo stays docked under the board with the next question ready: type it,
+// say it, tap one of the questions Halo thinks you'll have, or "dig into" any part of the answer.
+// Each one takes the board a level deeper, and the line of rings along the top is the way back up.
 
 extension View {
     /// Shows the web board over this view whenever Halo is looking something up.
@@ -26,6 +30,7 @@ struct DiveBoard: View {
     @State private var link: WebLink?
     @State private var spin = false
     @State private var playerFailed = false
+    @State private var ideasOpen = true
     @FocusState private var asking: Bool
 
     private struct WebLink: Identifiable { let url: URL; var id: String { url.absoluteString } }
@@ -34,31 +39,81 @@ struct DiveBoard: View {
     var body: some View {
         GeometryReader { geometry in
             let wide = geometry.size.width >= 940
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    header
-                    trail
-                    if let error = dive.error { failure(error) }
-                    if wide {
-                        HStack(alignment: .top, spacing: 30) {
-                            VStack(alignment: .leading, spacing: 24) { explanation; sources }.frame(maxWidth: .infinity, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 26) { videoPanel; pictures }.frame(width: min(500, geometry.size.width * 0.41))
+            ZStack {
+                // Each dive is its own page: a deeper one rises from below while the last one falls away, and it opens at the top.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        way
+                        header
+                        trail
+                        if let error = dive.error { failure(error) }
+                        if wide {
+                            HStack(alignment: .top, spacing: 30) {
+                                VStack(alignment: .leading, spacing: 24) { explanation; sources }.frame(maxWidth: .infinity, alignment: .leading)
+                                VStack(alignment: .leading, spacing: 26) { videoPanel; pictures }.frame(width: min(500, geometry.size.width * 0.41))
+                            }
+                        } else {
+                            videoPanel; explanation; pictures; sources
                         }
-                    } else {
-                        videoPanel; explanation; pictures; sources
                     }
-                    ask
+                    .padding(.horizontal, wide ? 44 : 22).padding(.top, 30).padding(.bottom, 24)
+                    .frame(maxWidth: 1240).frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, wide ? 44 : 22).padding(.top, 30).padding(.bottom, 44)
-                .frame(maxWidth: 1240).frame(maxWidth: .infinity)
+                .scrollDismissesKeyboard(.interactively)
+                .id(dive.id)
+                .transition(.asymmetric(insertion: .offset(y: 110).combined(with: .opacity), removal: .scale(scale: 0.94, anchor: .top).combined(with: .opacity)))
+                // While the next question is being typed, what is on the board steps back.
+                if asking {
+                    HaloStyle.text.opacity(0.16).ignoresSafeArea().onTapGesture { asking = false }.transition(.opacity)
+                }
             }
-            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) { dock }
+            .animation(.easeOut(duration: 0.2), value: asking)
         }
         .background(DeskPaper().ignoresSafeArea())
         .overlay { if let zoomed { viewer(zoomed) } }
         .sheet(item: $link) { SafariPage(url: $0.url).ignoresSafeArea() }
         .onChange(of: "\(dive.selected ?? "")@\(dive.playFrom)@\(dive.playing)") { _, _ in playerFailed = false }
+        .onChange(of: dive.id) { _, _ in zoomed = nil; ideasOpen = true }
+        .onChange(of: dive.answer != nil) { _, found in if found { UINotificationFeedbackGenerator().notificationOccurred(.success) } }
         .onAppear { spin = true; RemoteImageCache.relay = try? HaloClient.endpoint(store.serverURL, path: "api/dive/picture") }
+    }
+
+    // MARK: the way down
+    /// Every dive on this trip as a line of rings, the one on show filled in. Tap one to come back up to it.
+    @ViewBuilder private var way: some View {
+        let all = store.diveBack + [dive] + store.diveAhead
+        if all.count > 1 {
+            ScrollViewReader { line in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    Label("\(store.diveBack.count + 1) deep", systemImage: "arrow.down").labelStyle(.titleAndIcon)
+                        .font(HaloKit.text(11, .bold)).textCase(.uppercase).tracking(1.1).foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 5).background(HaloStyle.coral, in: Capsule()).padding(.trailing, 14)
+                        .contentTransition(.numericText())
+                    ForEach(Array(all.enumerated()), id: \.element.id) { index, item in
+                        let here = item.id == dive.id, ahead = index > store.diveBack.count
+                        if index > 0 {
+                            Capsule().fill(HaloStyle.coral.opacity(ahead ? 0.18 : 0.4)).frame(width: 24, height: 2.5).padding(.horizontal, 8)
+                        }
+                        Button { store.revisitDive(item.id) } label: {
+                            HStack(spacing: 7) {
+                                Circle().fill(here ? HaloStyle.coral : Color.white).frame(width: 13, height: 13)
+                                    .overlay(Circle().stroke(HaloStyle.coral.opacity(ahead ? 0.45 : 1), lineWidth: 2.5))
+                                Text(item.plan?.title ?? item.question).font(HaloKit.hand(here ? 24 : 22))
+                                    .foregroundStyle(here ? HaloStyle.text : HaloStyle.ink.opacity(ahead ? 0.55 : 1)).lineLimit(1).frame(maxWidth: 260, alignment: .leading).fixedSize()
+                            }.contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain).allowsHitTesting(!here).id(item.id)
+                        .accessibilityLabel(here ? "You are here: \(item.plan?.title ?? item.question)" : "Back to \(item.plan?.title ?? item.question)")
+                    }
+                }.padding(.vertical, 2)
+            }
+            // A long way down still opens on where you are.
+            .onAppear { line.scrollTo(dive.id, anchor: .trailing) }
+            }
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
     }
 
     // MARK: header
@@ -76,8 +131,8 @@ struct DiveBoard: View {
             }
             .frame(width: 58, height: 58).padding(.top, 4)
             VStack(alignment: .leading, spacing: 6) {
-                Text(dive.searching ? "HALO IS LOOKING THIS UP" : "HALO WENT AND FOUND OUT").font(.system(size: 11, weight: .bold)).tracking(1.4).foregroundStyle(HaloStyle.coral)
-                Text(dive.plan?.title ?? dive.question).font(.system(size: 38, weight: .regular, design: .serif)).foregroundStyle(HaloStyle.text)
+                Text(dive.searching ? "HALO IS LOOKING THIS UP" : "HALO WENT AND FOUND OUT").font(HaloKit.text(11, .bold)).tracking(1.4).foregroundStyle(HaloStyle.coral)
+                Text(dive.plan?.title ?? dive.question).font(HaloKit.title(38, .regular)).foregroundStyle(HaloStyle.text)
                     .lineLimit(2).minimumScaleFactor(0.7).fixedSize(horizontal: false, vertical: true)
                 if dive.plan != nil {
                     Text("“\(dive.question)”").font(.custom("Caveat-Regular", size: 24)).foregroundStyle(HaloStyle.ink).lineLimit(2)
@@ -86,7 +141,7 @@ struct DiveBoard: View {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "waveform").font(.system(size: 14, weight: .semibold)).foregroundStyle(HaloStyle.coral)
                             .symbolEffect(.variableColor.iterative, isActive: true).padding(.top, 3)
-                        Text(caption).font(.system(size: 15.5)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+                        Text(caption).font(HaloKit.text(15.5)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(Color.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -99,7 +154,7 @@ struct DiveBoard: View {
                 if dive.answer != nil {
                     Button { store.saveDive() } label: {
                         Label(dive.saved ? "In your notes" : "Save to my notes", systemImage: dive.saved ? "checkmark" : "square.and.arrow.down")
-                            .font(.system(size: 14, weight: .semibold)).lineLimit(1).fixedSize().padding(.horizontal, 14).padding(.vertical, 9)
+                            .font(HaloKit.text(14, .semibold)).lineLimit(1).fixedSize().padding(.horizontal, 14).padding(.vertical, 9)
                             .background(dive.saved ? Color.white : HaloStyle.ink, in: Capsule())
                             .overlay(Capsule().stroke(HaloStyle.ink.opacity(dive.saved ? 0.25 : 0)))
                             .foregroundStyle(dive.saved ? HaloStyle.ink : .white)
@@ -141,7 +196,7 @@ struct DiveBoard: View {
                     ZStack {
                         if step.done { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color(red: 0.13, green: 0.55, blue: 0.35)).transition(.scale.combined(with: .opacity)) }
                         else { Image(systemName: step.icon).foregroundStyle(HaloStyle.coral).symbolEffect(.pulse, isActive: true) }
-                    }.font(.system(size: 14, weight: .semibold)).frame(width: 18)
+                    }.font(HaloKit.text(14, .semibold)).frame(width: 18)
                     Text(step.text).font(.custom("Caveat-Regular", size: 21)).foregroundStyle(HaloStyle.text.opacity(step.done ? 0.75 : 1)).lineLimit(1)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 5)
@@ -155,9 +210,9 @@ struct DiveBoard: View {
     private func failure(_ message: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "wifi.exclamationmark").foregroundStyle(.red)
-            Text(message).font(.system(size: 15)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+            Text(message).font(HaloKit.text(15)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
-            Button("Try again") { store.startDive(dive.question, context: dive.context) }.font(.system(size: 14, weight: .semibold)).foregroundStyle(HaloStyle.ink)
+            Button("Try again") { store.startDive(dive.question, context: dive.context, deeper: true) }.font(HaloKit.text(14, .semibold)).foregroundStyle(HaloStyle.ink)
         }
         .padding(14).background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.red.opacity(0.25)))
@@ -171,30 +226,36 @@ struct DiveBoard: View {
                     HStack(alignment: .top, spacing: 14) {
                         Text("\(index + 1)").font(.custom("Caveat-Regular", size: 34)).foregroundStyle(HaloStyle.coral).frame(width: 24, alignment: .leading).offset(y: -6)
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(section.heading).font(.system(size: 22, weight: .semibold, design: .serif)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
-                            Text(section.text).font(.system(size: 17)).foregroundStyle(HaloStyle.text.opacity(0.88)).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
-                            if !section.cites.isEmpty {
-                                FlowRow(spacing: 6) {
-                                    ForEach(section.cites, id: \.self) { n in
-                                        if answer.sources.indices.contains(n - 1) {
-                                            let source = answer.sources[n - 1]
-                                            Button { open(source.url) } label: {
-                                                HStack(spacing: 5) {
-                                                    Text("\(n)").font(.system(size: 10.5, weight: .bold)).foregroundStyle(.white).frame(width: 17, height: 17).background(HaloStyle.ink, in: Circle())
-                                                    Text(source.site).font(.system(size: 12.5, weight: .medium)).foregroundStyle(HaloStyle.ink).lineLimit(1)
-                                                }
-                                                .padding(.leading, 4).padding(.trailing, 9).padding(.vertical, 3.5).background(HaloStyle.ink.opacity(0.07), in: Capsule())
-                                            }.buttonStyle(.plain)
-                                        }
+                            Text(section.heading).font(HaloKit.title(22, .semibold)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+                            Text(section.text).font(HaloKit.text(17)).foregroundStyle(HaloStyle.text.opacity(0.88)).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
+                            FlowRow(spacing: 6) {
+                                ForEach(section.cites, id: \.self) { n in
+                                    if answer.sources.indices.contains(n - 1) {
+                                        let source = answer.sources[n - 1]
+                                        Button { open(source.url) } label: {
+                                            HStack(spacing: 5) {
+                                                Text("\(n)").font(HaloKit.text(10.5, .bold)).foregroundStyle(.white).frame(width: 17, height: 17).background(HaloStyle.ink, in: Circle())
+                                                Text(source.site).font(HaloKit.text(12.5, .medium)).foregroundStyle(HaloStyle.ink).lineLimit(1)
+                                            }
+                                            .padding(.leading, 4).padding(.trailing, 9).padding(.vertical, 3.5).background(HaloStyle.ink.opacity(0.07), in: Capsule())
+                                        }.buttonStyle(.plain)
                                     }
-                                }.padding(.top, 2)
-                            }
+                                }
+                                // Every part of the answer is a door to the next level down.
+                                Button { go("Go deeper: \(section.heading)", about: "\(section.heading). \(section.text)") } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.turn.down.right").font(.system(size: 10.5, weight: .bold))
+                                        Text("dig into this").font(HaloKit.hand(21))
+                                    }
+                                    .foregroundStyle(HaloStyle.coral).padding(.horizontal, 8).frame(height: 24).contentShape(Rectangle())
+                                }.buttonStyle(.plain).accessibilityLabel("Dig into \(section.heading)")
+                            }.padding(.top, 2)
                         }
                     }
                 }
                 if !answer.takeaway.isEmpty {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("KEEP THIS").font(.system(size: 10.5, weight: .bold)).tracking(1.2).foregroundStyle(HaloStyle.text.opacity(0.5))
+                        Text("KEEP THIS").font(HaloKit.text(10.5, .bold)).tracking(1.2).foregroundStyle(HaloStyle.text.opacity(0.5))
                         Text(answer.takeaway).font(.custom("Caveat-Regular", size: 28)).foregroundStyle(HaloStyle.text).lineSpacing(1).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
@@ -226,12 +287,12 @@ struct DiveBoard: View {
                     ForEach(Array(list.enumerated()), id: \.offset) { index, source in
                         Button { open(source.url) } label: {
                             HStack(spacing: 12) {
-                                Text("\(index + 1)").font(.system(size: 11.5, weight: .bold)).foregroundStyle(.white).frame(width: 21, height: 21).background(HaloStyle.ink, in: Circle())
+                                Text("\(index + 1)").font(HaloKit.text(11.5, .bold)).foregroundStyle(.white).frame(width: 21, height: 21).background(HaloStyle.ink, in: Circle())
                                 RemoteImage(url: URL(string: "https://www.google.com/s2/favicons?sz=64&domain=\(source.site)"), fill: false) { _ in Image(systemName: "globe").foregroundStyle(.secondary) }
                                     .frame(width: 22, height: 22).clipShape(RoundedRectangle(cornerRadius: 5))
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(source.title).font(.system(size: 15, weight: .medium)).foregroundStyle(HaloStyle.text).lineLimit(1)
-                                    Text(source.site).font(.system(size: 12.5)).foregroundStyle(.secondary).lineLimit(1)
+                                    Text(source.title).font(HaloKit.text(15, .medium)).foregroundStyle(HaloStyle.text).lineLimit(1)
+                                    Text(source.site).font(HaloKit.text(12.5)).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 Spacer(minLength: 6)
                                 Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(HaloStyle.ink.opacity(0.5))
@@ -260,7 +321,7 @@ struct DiveBoard: View {
                                     // Always a way out if the network won't play it here.
                                     Button { openInYouTube(video, at: dive.playFrom) } label: {
                                         Label(playerFailed ? "Couldn’t play here. Open in YouTube" : "Open in YouTube", systemImage: "arrow.up.right.square")
-                                            .font(.system(size: 12.5, weight: .semibold)).padding(.horizontal, 10).padding(.vertical, 6)
+                                            .font(HaloKit.text(12.5, .semibold)).padding(.horizontal, 10).padding(.vertical, 6)
                                             .background(playerFailed ? HaloStyle.coral : Color.black.opacity(0.55), in: Capsule()).foregroundStyle(.white)
                                     }.buttonStyle(.plain).padding(10)
                                 }
@@ -273,7 +334,7 @@ struct DiveBoard: View {
                                     Image(systemName: "play.fill").font(.system(size: 26)).foregroundStyle(HaloStyle.coral).offset(x: 2)
                                         .frame(width: 68, height: 68).background(.white, in: Circle()).shadow(color: .black.opacity(0.3), radius: 12, y: 4)
                                     if !video.length.isEmpty {
-                                        Text(video.length).font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(.white)
+                                        Text(video.length).font(HaloKit.text(12, .semibold).monospacedDigit()).foregroundStyle(.white)
                                             .padding(.horizontal, 7).padding(.vertical, 3).background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 5))
                                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(10)
                                     }
@@ -283,8 +344,8 @@ struct DiveBoard: View {
                     }
                     .aspectRatio(16 / 9, contentMode: .fit).clipped()
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(video.title).font(.system(size: 16.5, weight: .semibold)).foregroundStyle(HaloStyle.text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                        Text([video.channel, video.views].filter { !$0.isEmpty }.joined(separator: " · ")).font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
+                        Text(video.title).font(HaloKit.text(16.5, .semibold)).foregroundStyle(HaloStyle.text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                        Text([video.channel, video.views].filter { !$0.isEmpty }.joined(separator: " · ")).font(HaloKit.text(13)).foregroundStyle(.secondary).lineLimit(1)
                     }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 14)
                     watchedNote(video)
                 }
@@ -299,8 +360,8 @@ struct DiveBoard: View {
                                         RemoteImage(url: other.thumbnail, fill: true) { _ in Color.black.opacity(0.1) }
                                             .frame(width: 148, height: 83).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(HaloStyle.coral, lineWidth: other.id == video.id ? 3 : 0))
-                                        Text(other.title).font(.system(size: 12, weight: .medium)).foregroundStyle(HaloStyle.text).lineLimit(2).multilineTextAlignment(.leading)
-                                        Text(other.length).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                                        Text(other.title).font(HaloKit.text(12, .medium)).foregroundStyle(HaloStyle.text).lineLimit(2).multilineTextAlignment(.leading)
+                                        Text(other.length).font(HaloKit.text(11).monospacedDigit()).foregroundStyle(.secondary)
                                     }.frame(width: 148, alignment: .leading)
                                 }.buttonStyle(.plain)
                             }
@@ -328,11 +389,11 @@ struct DiveBoard: View {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(spacing: 1) {
                         Image(systemName: "forward.fill").font(.system(size: 13, weight: .bold))
-                        Text(moment.clock).font(.system(size: 15, weight: .bold).monospacedDigit())
+                        Text(moment.clock).font(HaloKit.text(15, .bold).monospacedDigit())
                     }
                     .foregroundStyle(.white).frame(width: 62, height: 50).background(HaloStyle.coral, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("HALO WATCHED THIS FOR YOU").font(.system(size: 10, weight: .bold)).tracking(1.1).foregroundStyle(HaloStyle.coral)
+                        Text("HALO WATCHED THIS FOR YOU").font(HaloKit.text(10, .bold)).tracking(1.1).foregroundStyle(HaloStyle.coral)
                         Text("Skip to \(moment.clock): it \(moment.why.prefix(1).lowercased() + moment.why.dropFirst())").font(.custom("Caveat-Regular", size: 22)).foregroundStyle(HaloStyle.text)
                             .lineLimit(3).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                     }
@@ -402,33 +463,111 @@ struct DiveBoard: View {
                     .background(Color.white).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous)).frame(maxWidth: 900, maxHeight: 620)
                 Text(image.title).font(.custom("Caveat-Regular", size: 28)).foregroundStyle(.white).multilineTextAlignment(.center)
                 HStack(spacing: 14) {
-                    Text([image.credit, image.license, "Wikimedia Commons"].filter { !$0.isEmpty }.joined(separator: " · ")).font(.system(size: 13)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
-                    if !image.page.isEmpty { Button("See the original") { zoomed = nil; open(image.page) }.font(.system(size: 13, weight: .semibold)).foregroundStyle(.white) }
+                    Text([image.credit, image.license, "Wikimedia Commons"].filter { !$0.isEmpty }.joined(separator: " · ")).font(HaloKit.text(13)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                    if !image.page.isEmpty { Button("See the original") { zoomed = nil; open(image.page) }.font(HaloKit.text(13, .semibold)).foregroundStyle(.white) }
                 }
+                Button { zoomed = nil; go("Explain this picture: \(image.title)", about: "A picture they were shown, titled “\(image.title)”.") } label: {
+                    Label("Ask Halo about this", systemImage: "arrow.turn.down.right")
+                }.buttonStyle(PillButtonStyle())
             }.padding(34).allowsHitTesting(true)
         }.transition(.opacity).zIndex(5)
     }
 
     // MARK: keep going
-    private var ask: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "globe").font(.system(size: 16, weight: .medium)).foregroundStyle(HaloStyle.coral)
-            TextField("Ask a follow-up, or look up something else…", text: $followUp).font(.system(size: 16)).textFieldStyle(.plain).submitLabel(.search).focused($asking).onSubmit(send)
-            if !followUp.trimmingCharacters(in: .whitespaces).isEmpty {
-                Button(action: send) { Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).frame(width: 32, height: 32).background(HaloStyle.coral, in: Circle()).foregroundStyle(.white) }
-                    .buttonStyle(.plain).accessibilityLabel("Look it up")
+    private var typed: String { followUp.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// Where to go from here: the questions Halo expects next, then two that work for anything.
+    private var ideas: [String] {
+        guard let answer = dive.answer else { return [] }
+        var list = (answer.next ?? []).filter { !$0.isEmpty }
+        if list.isEmpty { list = answer.sections.prefix(2).map { "More on “\($0.heading)”" } }
+        return list + ["Explain it more simply", "Give me a real-world example"]
+    }
+    private var showIdeas: Bool { ideasOpen && !ideas.isEmpty && typed.isEmpty && !store.diveListening && !dive.playing }
+    /// Halo is busy with this bar: hearing a question, or still putting the answer together.
+    private var alive: Bool { store.diveListening || (dive.answer == nil && dive.error == nil) }
+
+    /// Halo, docked under the board whatever is on it, with the next question ready to go.
+    private var dock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if showIdeas {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(ideas.enumerated()), id: \.element) { index, idea in
+                            Button { go(idea) } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.turn.down.right").font(.system(size: 11, weight: .bold)).foregroundStyle(HaloStyle.coral)
+                                    Text(idea).font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink).lineLimit(1)
+                                }
+                                .padding(.horizontal, 14).padding(.vertical, 6)
+                                .background(Color.white, in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12)))
+                                .shadow(color: .black.opacity(0.1), radius: 7, y: 3)
+                            }.buttonStyle(.plain).arrives(index)
+                        }
+                    }.padding(.leading, 78).padding(.trailing, 4).padding(.vertical, 6)
+                }
+                .id(dive.id)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            HStack(spacing: 12) {
+                Button { withAnimation(.spring(duration: 0.35, bounce: 0.2)) { ideasOpen.toggle() } } label: {
+                    TutorAvatar(cue: store.diveCue, size: 86, voiceLevel: { [store] in store.player.outputLevel }, micLevel: { [store] in CGFloat(store.speech.meter.value) })
+                        .offset(y: -4).frame(width: 66, height: 66)
+                        .background(Color.white, in: Circle())
+                        .overlay(Circle().stroke(HaloStyle.coral.opacity(alive ? 0.6 : 0.18), lineWidth: 2))
+                        .shadow(color: .black.opacity(0.16), radius: 14, y: 6)
+                }
+                .buttonStyle(.plain).disabled(ideas.isEmpty)
+                .accessibilityLabel(showIdeas ? "Halo. Put its ideas away" : "Halo. Ideas for what to ask next")
+                bar
             }
         }
-        .padding(.leading, 16).padding(.trailing, 8).frame(height: 50)
-        .background(Color.white, in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(asking ? 0.5 : 0.12)))
-        .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
-        .frame(maxWidth: 720).frame(maxWidth: .infinity).padding(.top, 8)
+        .frame(maxWidth: 840).frame(maxWidth: .infinity)
+        .padding(.horizontal, 20).padding(.top, 30).padding(.bottom, 12)
+        // The board fades out under the dock instead of being cut off by it.
+        .background {
+            LinearGradient(stops: [.init(color: HaloStyle.paper.opacity(0), location: 0), .init(color: HaloStyle.paper.opacity(0.93), location: 0.24), .init(color: HaloStyle.paper, location: 1)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea().allowsHitTesting(false)
+        }
+        .animation(.spring(duration: 0.4, bounce: 0.18), value: showIdeas)
+        .animation(.spring(duration: 0.3), value: typed.isEmpty)
     }
-    private func send() {
-        let next = followUp.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !next.isEmpty else { return }
+    private var bar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: store.diveListening ? "waveform" : "arrow.turn.down.right").font(.system(size: 16, weight: .semibold)).foregroundStyle(HaloStyle.coral)
+                .symbolEffect(.variableColor.iterative, isActive: store.diveListening).contentTransition(.symbolEffect(.replace)).frame(width: 22)
+            if store.diveListening {
+                // What Halo has heard so far; a pause sends it.
+                Text(store.diveHeard.isEmpty ? "I’m listening. Ask away…" : store.diveHeard).font(HaloKit.text(17))
+                    .foregroundStyle(HaloStyle.text.opacity(store.diveHeard.isEmpty ? 0.45 : 1)).lineLimit(1).truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                TextField(dive.answer == nil ? "Ask something else while Halo looks…" : "Go deeper. What do you want to know next?", text: $followUp)
+                    .font(HaloKit.text(17)).textFieldStyle(.plain).submitLabel(.search).focused($asking).onSubmit(send)
+            }
+            if typed.isEmpty || store.diveListening {
+                Button { asking = false; store.listenForDive() } label: {
+                    Image(systemName: store.diveListening ? "stop.fill" : "mic.fill").font(.system(size: 16, weight: .semibold)).frame(width: 42, height: 42)
+                        .background(HaloStyle.coral, in: Circle()).foregroundStyle(.white)
+                        .background { if store.diveListening { MicPulse(meter: store.speech.meter) } }
+                }.buttonStyle(.plain).accessibilityLabel(store.diveListening ? "Stop listening" : "Ask out loud").transition(.scale.combined(with: .opacity))
+            } else {
+                Button(action: send) {
+                    Image(systemName: "arrow.down").font(.system(size: 16, weight: .bold)).frame(width: 42, height: 42)
+                        .background(HaloStyle.coral, in: Circle()).foregroundStyle(.white)
+                }.buttonStyle(.plain).accessibilityLabel("Go deeper").transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.leading, 18).padding(.trailing, 7).frame(height: 56)
+        .background(Color.white, in: Capsule())
+        .overlay { HaloEdge(alive: alive, focused: asking).allowsHitTesting(false) }
+        .shadow(color: alive ? HaloStyle.coral.opacity(0.22) : .black.opacity(0.14), radius: 18, y: 8)
+    }
+    private func send() { if !typed.isEmpty { go(typed) } }
+    /// One level down, from wherever it was asked: the bar, an idea, a part of the answer, a picture.
+    private func go(_ question: String, about part: String = "") {
         followUp = ""; asking = false
-        store.startDive(next, context: "This follows an earlier question, “\(dive.question)” (about \(dive.plan?.title ?? "the same topic")).")
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        store.diveDeeper(question, about: part)
     }
 
     private func openInYouTube(_ video: DiveVideo, at start: Int) {
@@ -436,11 +575,43 @@ struct DiveBoard: View {
         UIApplication.shared.open(url)
     }
     private func label(_ text: String) -> some View {
-        Text(text).font(.system(size: 11, weight: .bold)).tracking(1.3).foregroundStyle(HaloStyle.text.opacity(0.5)).padding(.leading, 4)
+        Text(text).font(HaloKit.text(11, .bold)).tracking(1.3).foregroundStyle(HaloStyle.text.opacity(0.5)).padding(.leading, 4)
     }
     private func open(_ address: String) {
         guard let url = URL(string: address), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return }
         link = WebLink(url: url)
+    }
+}
+
+/// The rim of the ask bar. While Halo is listening or searching, its colours run round the rim like a halo.
+private struct HaloEdge: View {
+    var alive: Bool
+    var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        if alive, !reduceMotion {
+            TimelineView(.animation) { timeline in
+                let turn = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.6) / 2.6 * 360
+                let sweep = AngularGradient(colors: [HaloStyle.coral, HaloKit.highlight, HaloStyle.ink, HaloStyle.coral.opacity(0.2), HaloStyle.coral], center: .center, angle: .degrees(turn))
+                ZStack {
+                    Capsule().strokeBorder(sweep, lineWidth: 6).blur(radius: 8).opacity(0.75)
+                    Capsule().strokeBorder(sweep, lineWidth: 2.5)
+                }
+            }
+            .transition(.opacity)
+        } else {
+            Capsule().strokeBorder(focused || alive ? HaloStyle.coral.opacity(0.6) : HaloStyle.ink.opacity(0.12), lineWidth: focused || alive ? 1.5 : 1)
+        }
+    }
+}
+
+/// A soft ring behind the microphone button that swells with the student's voice.
+private struct MicPulse: View {
+    let meter: LevelMeter
+    var body: some View {
+        TimelineView(.animation) { _ in
+            Circle().fill(HaloStyle.coral.opacity(0.25)).scaleEffect(1.12 + 0.6 * CGFloat(meter.value))
+        }
     }
 }
 

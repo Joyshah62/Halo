@@ -35,7 +35,7 @@ struct RecapView: View {
                         ForEach(RecapScope.allCases, id: \.self) { scope in
                             let on = store.recapScope == scope
                             Button { withAnimation(.spring(duration: 0.3)) { store.recapScope = scope } } label: {
-                                Text(scope.rawValue).font(.system(size: 14, weight: .semibold)).padding(.horizontal, 14).padding(.vertical, 8)
+                                Text(scope.rawValue).font(HaloKit.text(14, .semibold)).padding(.horizontal, 14).padding(.vertical, 8)
                                     .background(on ? HaloStyle.ink : .clear, in: Capsule()).foregroundStyle(on ? .white : HaloStyle.ink)
                             }.buttonStyle(.plain).accessibilityAddTraits(on ? .isSelected : [])
                         }
@@ -97,7 +97,7 @@ struct RecapView: View {
         VStack(alignment: .leading, spacing: 14) {
             if let title {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(title).font(.system(size: 24, weight: .semibold, design: .serif)).foregroundStyle(HaloStyle.text)
+                    Text(title).font(HaloKit.title(24, .semibold)).foregroundStyle(HaloStyle.text)
                     Text("\(notes.count) question\(notes.count == 1 ? "" : "s")").font(HaloKit.hand(22)).foregroundStyle(HaloStyle.ink)
                 }.padding(.top, 6)
             }
@@ -133,7 +133,7 @@ struct RecapRow: View {
                 Text("\(session.number)").font(HaloKit.hand(40)).foregroundStyle(HaloStyle.coral).frame(minWidth: 24, alignment: .leading).offset(y: -9)
                 VStack(alignment: .leading, spacing: 5) {
                     label("YOU ASKED · \(page.uppercased())")
-                    Text(question).font(.system(size: 22, weight: .semibold, design: .serif)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+                    Text(question).font(HaloKit.title(22, .semibold)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let points = item?.points, !points.isEmpty {
@@ -142,12 +142,12 @@ struct RecapRow: View {
                     ForEach(Array(points.enumerated()), id: \.offset) { _, point in
                         HStack(alignment: .firstTextBaseline, spacing: 9) {
                             Circle().fill(HaloStyle.coral).frame(width: 5, height: 5).offset(y: -3)
-                            Text(point).font(.system(size: 16.5)).foregroundStyle(HaloStyle.text).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                            Text(point).font(HaloKit.text(16.5)).foregroundStyle(HaloStyle.text).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
             }
-            Button(action: open) { Label("Open on \(page.lowercased())", systemImage: "arrow.up.right").font(.footnote.weight(.semibold)) }
+            Button(action: open) { Label("Open on \(page.lowercased())", systemImage: "arrow.up.right").font(HaloKit.text(13, .semibold)) }
                 .buttonStyle(.plain).foregroundStyle(HaloStyle.ink).padding(.horizontal, 12).padding(.vertical, 7)
                 .background(HaloStyle.ink.opacity(0.07), in: Capsule()).padding(.top, 2)
         }.padding(.leading, 0)
@@ -157,7 +157,7 @@ struct RecapRow: View {
             .buttonStyle(.plain).accessibilityLabel("Halo’s note for question \(session.number)").accessibilityHint("Opens it on its page")
     }
     private func label(_ text: String) -> some View {
-        Text(text).font(.system(size: 10.5, weight: .bold)).tracking(1.1).foregroundStyle(.secondary)
+        Text(text).font(HaloKit.text(10.5, .bold)).tracking(1.1).foregroundStyle(.secondary)
     }
 }
 
@@ -172,7 +172,7 @@ struct RecapNoteCard: View {
                 Text("\(session.number)").font(.custom("Caveat-Regular", size: 24)).foregroundStyle(HaloStyle.coral)
                     .frame(width: 22, height: 24)
                 Text(session.topic.isEmpty ? page : "\(session.topic) · \(page)")
-                    .font(.system(size: 11.5)).foregroundStyle(Color(uiColor: InkPalette.question)).lineLimit(1)
+                    .font(HaloKit.text(11.5)).foregroundStyle(Color(uiColor: InkPalette.question)).lineLimit(1)
                 Spacer(minLength: 4)
                 Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color(uiColor: InkPalette.question).opacity(0.55))
             }

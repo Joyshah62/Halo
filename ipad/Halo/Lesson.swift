@@ -440,7 +440,7 @@ struct LessonBoard: View {
             HaloRing(size: 38, working: coach.busy)
             VStack(alignment: .leading, spacing: 2) {
                 Eyebrow(store.demoMode ? "HALO · OFFLINE SAMPLE" : "HALO · YOUR CHAPTER, TOGETHER", color: HaloStyle.coral)
-                Text(coach.plan?.title ?? "A tutor. Your book. Your pace.").font(.system(size: 26, design: .serif)).lineLimit(1).minimumScaleFactor(0.7)
+                Text(coach.plan?.title ?? "A tutor. Your book. Your pace.").font(HaloKit.title(26)).lineLimit(1).minimumScaleFactor(0.7)
                 if let thread = coach.plan?.thread, !thread.isEmpty {
                     Text(thread).font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink).lineLimit(1).minimumScaleFactor(0.75)
                 }
@@ -478,13 +478,13 @@ struct LessonBoard: View {
                     }.frame(height: 300)
                     TutorBubble(text: greeting, spokenAt: introAt, duration: introFor, cue: coach.busy ? TutorCue(base: .thinking) : TutorCue(base: .idle, speakingUntil: introAt.addingTimeInterval(introFor)), fontSize: 24, tail: .top)
                         .frame(maxWidth: 620)
-                    Text("Make it make sense.").font(.system(size: 52, weight: .regular, design: .serif)).tracking(-1.5).multilineTextAlignment(.center)
+                    Text("Make it make sense.").font(HaloKit.title(52, .regular)).tracking(-1.5).multilineTextAlignment(.center)
                     HStack(spacing: 10) {
                         ScribbleChip(text: coach.chapter.map { "pages \($0.start + 1)–\($0.end + 1)" } ?? store.displayTitle, icon: "book")
                         ScribbleChip(text: "asks what you think", icon: "questionmark.bubble")
                         ScribbleChip(text: "just talk back", icon: "waveform")
                     }
-                    if store.demoMode { Text("Offline sample · a scripted chain-rule lesson. Turn off sample answers in Settings to teach an imported chapter.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center) }
+                    if store.demoMode { Text("Offline sample · a scripted chain-rule lesson. Turn off sample answers in Settings to teach an imported chapter.").font(HaloKit.text(13)).foregroundStyle(.secondary).multilineTextAlignment(.center) }
                     errors.frame(maxWidth: 620)
                     Button { store.beginLesson() } label: {
                         HStack(spacing: 12) {
@@ -496,7 +496,7 @@ struct LessonBoard: View {
                                 }
                             } else { Text("Teach me"); Image(systemName: "sparkles") }
                         }
-                        .font(.system(size: 18, weight: .semibold)).padding(.horizontal, 30).padding(.vertical, 18)
+                        .font(HaloKit.text(18, .semibold)).padding(.horizontal, 30).padding(.vertical, 18)
                         .background(LinearGradient(colors: [HaloStyle.ink, Color(red: 0.48, green: 0.24, blue: 0.86), HaloStyle.coral], startPoint: .leading, endPoint: .trailing), in: Capsule())
                         .foregroundStyle(.white).shadow(color: HaloStyle.coral.opacity(0.35), radius: 18, y: 8)
                     }.buttonStyle(.plain).disabled(coach.busy).accessibilityLabel("Build my lesson")
@@ -523,7 +523,7 @@ struct LessonBoard: View {
                             JourneyStop(number: concept.n, verdict: coach.grades[concept.n]?.verdict, here: concept.n == coach.current && coach.summary == nil, viewing: concept.n == coach.selected)
                         }.frame(height: 44)
                         if wide || concept.n == coach.selected {
-                            Text(concept.name).font(.system(size: 12.5, weight: concept.n == coach.selected ? .semibold : .regular))
+                            Text(concept.name).font(HaloKit.text(12.5, concept.n == coach.selected ? .semibold : .regular))
                                 .foregroundStyle(reached ? HaloStyle.text : HaloStyle.text.opacity(0.45))
                                 .multilineTextAlignment(.center).lineLimit(2).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
                         }
@@ -552,9 +552,9 @@ struct LessonBoard: View {
                     .animation(.spring(duration: 0.35), value: text)
                 if !coach.said.isEmpty, !viewingEarlier, coach.said != coach.guesses[coach.current] || coach.question == nil {
                     HStack(spacing: 8) {
-                        if coach.interjection != nil { Text("Halo's wrapping up, then it's yours").font(.caption).foregroundStyle(.secondary) }
+                        if coach.interjection != nil { Text("Halo's wrapping up, then it's yours").font(HaloKit.text(12)).foregroundStyle(.secondary) }
                         Text(coach.said).font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink).lineLimit(2)
-                        Text("YOU").font(.system(size: 9.5, weight: .bold)).tracking(1.2).foregroundStyle(HaloStyle.ink.opacity(0.6))
+                        Text("YOU").font(HaloKit.text(9.5, .bold)).tracking(1.2).foregroundStyle(HaloStyle.ink.opacity(0.6))
                     }
                     .padding(.horizontal, 14).padding(.vertical, 6)
                     .background(HaloStyle.ink.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -581,7 +581,7 @@ struct LessonBoard: View {
         VStack(spacing: 16) {
             Spacer(minLength: 0)
             HaloRing(size: 92, symbol: "questionmark").breathing()
-            Text("What's your hunch?").font(.system(size: 42, design: .serif)).tracking(-1)
+            Text("What's your hunch?").font(HaloKit.title(42)).tracking(-1)
             Text("no wrong answers. a guess just tells me where to start").font(HaloKit.hand(26)).foregroundStyle(HaloStyle.ink).multilineTextAlignment(.center)
             if let concept = coach.plan?.concepts.first(where: { $0.n == coach.current }) {
                 ScribbleChip(text: "stop \(concept.n) of \(coach.plan?.concepts.count ?? 0) · about \(concept.minutes) min", icon: "mappin.and.ellipse").padding(.top, 4)
@@ -643,11 +643,11 @@ struct LessonBoard: View {
                 HStack {
                     Eyebrow("IN YOUR BOOK · PAGE \(material.anchor.page)", color: HaloStyle.coral)
                     Spacer()
-                    Button { source = true } label: { Label("Open the page", systemImage: "arrow.up.right").font(.system(size: 12.5, weight: .medium)) }.buttonStyle(.plain).foregroundStyle(HaloStyle.ink)
+                    Button { source = true } label: { Label("Open the page", systemImage: "arrow.up.right").font(HaloKit.text(12.5, .medium)) }.buttonStyle(.plain).foregroundStyle(HaloStyle.ink)
                 }
-                if !material.headline.isEmpty { Text(material.headline).font(.system(size: 23, design: .serif)).fixedSize(horizontal: false, vertical: true) }
+                if !material.headline.isEmpty { Text(material.headline).font(HaloKit.title(23)).fixedSize(horizontal: false, vertical: true) }
                 if !material.anchor.quote.isEmpty {
-                    Text("“\(material.anchor.quote)”").font(.system(size: 18, design: .serif)).lineSpacing(6).lineLimit(7)
+                    Text("“\(material.anchor.quote)”").font(HaloKit.title(18)).lineSpacing(6).lineLimit(7)
                         .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 12).padding(.vertical, 9)
                         .background(HaloKit.highlight.opacity(0.7), in: RoundedRectangle(cornerRadius: 5))
                 }
@@ -658,7 +658,7 @@ struct LessonBoard: View {
         VStack(alignment: .leading, spacing: 14) {
             if let visual = material.visual, !visual.nodes.isEmpty {
                 Eyebrow("PICTURE IT", color: HaloStyle.coral)
-                if !visual.title.isEmpty { Text(visual.title).font(.system(size: 23, design: .serif)) }
+                if !visual.title.isEmpty { Text(visual.title).font(HaloKit.title(23)) }
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .center, spacing: 8) {
                         ForEach(Array(visual.nodes.enumerated()), id: \.offset) { index, node in
@@ -683,8 +683,8 @@ struct LessonBoard: View {
     private func diagramNode(_ node: LessonDiagramNode, index: Int) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Text("\(index + 1)").font(HaloKit.hand(22)).foregroundStyle(HaloStyle.coral)
-            Text(node.label).font(.system(size: 20, weight: .medium, design: .serif)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
-            Text(node.detail).font(.system(size: 13)).lineSpacing(2).foregroundStyle(HaloStyle.text.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
+            Text(node.label).font(HaloKit.title(20, .medium)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
+            Text(node.detail).font(HaloKit.text(13)).lineSpacing(2).foregroundStyle(HaloStyle.text.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
         }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(HaloStyle.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(HaloStyle.ink.opacity(0.14)))
@@ -694,12 +694,12 @@ struct LessonBoard: View {
             if let example = material.example, !example.steps.isEmpty {
                 let moves = coach.selected == coach.current && coach.summary == nil ? min(coach.exampleMoves, example.steps.count) : example.steps.count
                 Eyebrow("WORK IT THROUGH", color: HaloStyle.coral)
-                if !example.title.isEmpty { Text(example.title).font(.system(size: 23, design: .serif)) }
-                Text(example.given).font(.system(size: 25, weight: .medium, design: .serif)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
+                if !example.title.isEmpty { Text(example.title).font(HaloKit.title(23)) }
+                Text(example.given).font(HaloKit.title(25, .medium)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
                 ForEach(Array(example.steps.prefix(moves).enumerated()), id: \.offset) { index, move in
                     HStack(alignment: .top, spacing: 12) {
                         Text("\(index + 1)").font(HaloKit.hand(26)).foregroundStyle(HaloStyle.coral).frame(width: 24)
-                        Text(move).font(.system(size: 17)).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
+                        Text(move).font(HaloKit.text(17)).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
                     }.transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 if moves < example.steps.count {
@@ -709,7 +709,7 @@ struct LessonBoard: View {
                         .buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: false))
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(example.result).font(.system(size: 27, weight: .medium, design: .serif)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
+                        Text(example.result).font(HaloKit.title(27, .medium)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
                         if !example.why.isEmpty { Text(example.why).font(HaloKit.hand(23)).fixedSize(horizontal: false, vertical: true) }
                     }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(HaloKit.highlight, in: RoundedRectangle(cornerRadius: 6)).transition(.opacity)
                 }
@@ -721,24 +721,24 @@ struct LessonBoard: View {
     /// From outside the book: a second explanation with its sources, and credited pictures.
     @ViewBuilder private func extras(_ material: LessonMaterial) -> some View {
         if material.status == "searching" {
-            HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Looking for another way to show this…") }.font(.caption).foregroundStyle(.secondary).padding(.leading, 6)
+            HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Looking for another way to show this…") }.font(HaloKit.text(12)).foregroundStyle(.secondary).padding(.leading, 6)
         }
         if let web = material.web {
             DisclosureGroup(isExpanded: $showWeb) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(web.heading).font(.system(size: 18, weight: .medium, design: .serif))
-                    Text(web.text).font(.system(size: 15)).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
+                    Text(web.heading).font(HaloKit.title(18, .medium))
+                    Text(web.text).font(HaloKit.text(15)).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
                     FlowRow(spacing: 8) {
                         ForEach(Array(web.sources.enumerated()), id: \.offset) { _, item in
                             if let url = webURL(item.url) {
-                                Link(destination: url) { Label(item.site, systemImage: "arrow.up.right").font(.caption.weight(.medium)).padding(8).background(HaloStyle.ink.opacity(0.07), in: Capsule()) }
+                                Link(destination: url) { Label(item.site, systemImage: "arrow.up.right").font(HaloKit.text(12, .medium)).padding(8).background(HaloStyle.ink.opacity(0.07), in: Capsule()) }
                                     .accessibilityLabel("Source: \(item.title)")
                             }
                         }
                     }
-                    Text("Supplementary explanation from the web. Your textbook sets the lesson’s scope.").font(.caption2).foregroundStyle(.secondary)
+                    Text("Supplementary explanation from the web. Your textbook sets the lesson’s scope.").font(HaloKit.text(11)).foregroundStyle(.secondary)
                 }.padding(.top, 12)
-            } label: { Label("Another angle · \(web.sources.first?.site ?? "web")", systemImage: "globe").font(.system(size: 13.5, weight: .medium)) }
+            } label: { Label("Another angle · \(web.sources.first?.site ?? "web")", systemImage: "globe").font(HaloKit.text(13.5, .medium)) }
             .tint(HaloStyle.ink).haloCard(radius: 18, padding: 16)
         }
         ForEach(material.images) { picture in
@@ -748,8 +748,8 @@ struct LessonBoard: View {
                         RemoteImage(url: webURL(picture.thumb), fill: false) { _ in Image(systemName: "photo").foregroundStyle(.secondary) }
                             .frame(maxWidth: .infinity).frame(height: 200).background(Color.white)
                     }
-                    Text(picture.title).font(.system(size: 14, weight: .medium))
-                    Link("\(picture.credit) · \(picture.license) · source ↗", destination: url).font(.caption2)
+                    Text(picture.title).font(HaloKit.text(14, .medium))
+                    Link("\(picture.credit) · \(picture.license) · source ↗", destination: url).font(HaloKit.text(11))
                 }.haloCard(radius: 18, padding: 14)
             }
         }
@@ -825,7 +825,7 @@ struct LessonBoard: View {
                 HStack(alignment: .center, spacing: 10) {
                     MicButton(recording: speech.isRecording, level: { [speech] in CGFloat(speech.meter.value) }) { typing = false; coach.toggleMic() }
                     TextField(prompt, text: $coach.draft, axis: .vertical)
-                        .focused($typing).font(.system(size: 17)).lineLimit(1...3).padding(.horizontal, 16).padding(.vertical, 13)
+                        .focused($typing).font(HaloKit.text(17)).lineLimit(1...3).padding(.horizontal, 16).padding(.vertical, 13)
                         .background(HaloStyle.paper, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(typing ? HaloStyle.ink.opacity(0.45) : HaloStyle.ink.opacity(0.12)))
                         .onSubmit { coach.reply() }
@@ -835,7 +835,7 @@ struct LessonBoard: View {
                         .accessibilityLabel("Send")
                 }.disabled(!coach.canSpeak)
                 if coach.canAnswer { quickReplies }
-                if let error = speech.lastError { Text(error).font(.caption).foregroundStyle(.red) }
+                if let error = speech.lastError { Text(error).font(HaloKit.text(12)).foregroundStyle(.red) }
             }
             .padding(16)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
@@ -865,7 +865,7 @@ struct LessonBoard: View {
     }
     private func choice(_ option: String) -> some View {
         Button { coach.draft = option; coach.reply() } label: {
-            Text(option).font(.system(size: 19, weight: .medium, design: .serif)).padding(.horizontal, 20).padding(.vertical, 12)
+            Text(option).font(HaloKit.title(19, .medium)).padding(.horizontal, 20).padding(.vertical, 12)
                 .background(HaloStyle.ink.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(HaloStyle.ink.opacity(0.22)))
                 .foregroundStyle(HaloStyle.ink)
@@ -878,7 +878,7 @@ struct LessonBoard: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 stage(wide: wide)
-                Text("Look what\nyou connected.").font(.system(size: 46, design: .serif)).tracking(-1).arrives(1)
+                Text("Look what\nyou connected.").font(HaloKit.title(46)).tracking(-1).arrives(1)
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(concepts) { concept in
                         let got = summary.nailed.contains(concept.name)
@@ -887,7 +887,7 @@ struct LessonBoard: View {
                             HStack(alignment: .center, spacing: 14) {
                                 JourneyStop(number: concept.n, verdict: got ? "got_it" : "skipped", here: false, viewing: false)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(concept.name).font(.system(size: 18, weight: .medium, design: .serif))
+                                    Text(concept.name).font(HaloKit.title(18, .medium))
                                     Text(got ? "you've got this" : reason ?? "worth another look").font(HaloKit.hand(22)).foregroundStyle(got ? HaloKit.leaf : HaloKit.amber)
                                 }
                                 Spacer(minLength: 0)
@@ -912,7 +912,7 @@ struct LessonBoard: View {
     @ViewBuilder private var errors: some View {
         if let error = coach.error {
             VStack(alignment: .leading, spacing: 10) {
-                Text(error).font(.system(size: 14)).foregroundStyle(.red)
+                Text(error).font(HaloKit.text(14)).foregroundStyle(.red)
                 if coach.plan != nil {
                     HStack(spacing: 10) {
                         Button("Try that again") { coach.retry() }.buttonStyle(PillButtonStyle(color: HaloStyle.ink))
@@ -927,7 +927,7 @@ struct LessonBoard: View {
             if let concept = coach.plan?.concepts.first(where: { $0.n == coach.selected }), let page = store.pdf?.page(at: (coach.materials[coach.selected]?.anchor.page ?? concept.page) - 1) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Page \(coach.materials[coach.selected]?.anchor.page ?? concept.page) · \(concept.name)").font(.headline)
+                        Text("Page \(coach.materials[coach.selected]?.anchor.page ?? concept.page) · \(concept.name)").font(HaloKit.text(17, .semibold))
                         Image(uiImage: page.thumbnail(of: CGSize(width: 1300, height: 1800), for: .cropBox)).resizable().scaledToFit()
                     }.padding()
                 }.background(HaloStyle.paper).toolbar { ToolbarItem(placement: .confirmationAction) { Button("Back to lesson") { source = false } } }

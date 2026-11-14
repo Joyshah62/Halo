@@ -61,13 +61,13 @@ struct NotebookView: View {
         let open = entry.id == store.noteID
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 5) {
-                Text(entry.displayTitle).font(.system(size: 16, weight: .semibold, design: .serif)).foregroundStyle(HaloStyle.text).lineLimit(1)
+                Text(entry.displayTitle).font(HaloKit.title(16, .semibold)).foregroundStyle(HaloStyle.text).lineLimit(1)
                 Spacer(minLength: 2)
-                if entry.enhanced != nil { Image(systemName: "sparkles").font(.caption).foregroundStyle(HaloStyle.coral).accessibilityLabel("Enhanced") }
+                if entry.enhanced != nil { Image(systemName: "sparkles").font(HaloKit.text(12)).foregroundStyle(HaloStyle.coral).accessibilityLabel("Enhanced") }
             }
             let body = entry.text.split(whereSeparator: \.isNewline).joined(separator: " ")
-            if !body.isEmpty { Text(body).font(.footnote).foregroundStyle(.secondary).lineLimit(2) }
-            if entry.drawing != nil { Label(body.isEmpty ? "Handwritten" : "With handwriting", systemImage: "pencil.tip").font(.caption).foregroundStyle(.secondary) }
+            if !body.isEmpty { Text(body).font(HaloKit.text(13)).foregroundStyle(.secondary).lineLimit(2) }
+            if entry.drawing != nil { Label(body.isEmpty ? "Handwritten" : "With handwriting", systemImage: "pencil.tip").font(HaloKit.text(12)).foregroundStyle(.secondary) }
             Text(store.notebookIsLoose ? entry.updatedAt.formatted(.relative(presentation: .named)) : "p. \(entry.pageIndex + 1) · \(entry.updatedAt.formatted(.relative(presentation: .named)))")
                 .font(HaloKit.hand(17)).foregroundStyle(HaloStyle.ink.opacity(0.75))
         }
@@ -110,7 +110,7 @@ private struct NotePage: View {
         VStack(alignment: .leading, spacing: 0) {
             header.padding(.horizontal, 34).padding(.top, 22).padding(.bottom, 14)
             if let error = store.noteError {
-                Text(error).font(.footnote).foregroundStyle(.red).padding(.horizontal, 34).padding(.bottom, 10)
+                Text(error).font(HaloKit.text(13)).foregroundStyle(.red).padding(.horizontal, 34).padding(.bottom, 10)
             }
             if showsEnhanced, let enhanced = entry.enhanced {
                 ZStack(alignment: .bottom) {
@@ -141,7 +141,7 @@ private struct NotePage: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField(entry.enhanced?.title ?? "Title", text: $title).font(.system(size: 30, design: .serif)).foregroundStyle(HaloStyle.text)
+            TextField(entry.enhanced?.title ?? "Title", text: $title).font(HaloKit.title(30)).foregroundStyle(HaloStyle.text)
             // One row when there is room; otherwise two (with the notes list open, on a smaller iPad).
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) { pageLink; Spacer(minLength: 8); writingTools; versionTools }
@@ -160,7 +160,7 @@ private struct NotePage: View {
     @ViewBuilder private var pageLink: some View {
         if !store.notebookIsLoose {
             Button { store.openPage(ofNote: entry.id) } label: { Label(store.pageLabel(entry.pageIndex), systemImage: "arrow.up.right").lineLimit(1) }
-                .font(.footnote.weight(.semibold)).buttonStyle(.plain).foregroundStyle(HaloStyle.ink).fixedSize()
+                .font(HaloKit.text(13, .semibold)).buttonStyle(.plain).foregroundStyle(HaloStyle.ink).fixedSize()
         }
     }
     @ViewBuilder private var writingTools: some View {
@@ -174,7 +174,7 @@ private struct NotePage: View {
     @ViewBuilder private var versionTools: some View {
                 if showsEnhanced {
                     Button { withAnimation(.spring(duration: 0.3)) { circling.toggle(); if circling { store.dismissRefine() } } } label: {
-                        Label("Circle & ask", systemImage: "circle.dashed").font(.system(size: 13, weight: .semibold))
+                        Label("Circle & ask", systemImage: "circle.dashed").font(HaloKit.text(13, .semibold))
                             .padding(.horizontal, 12).padding(.vertical, 7)
                             .background(circling ? HaloStyle.coral : HaloStyle.coral.opacity(0.1), in: Capsule())
                             .foregroundStyle(circling ? .white : HaloStyle.coral)
@@ -194,7 +194,7 @@ private struct NotePage: View {
                 if busy { ProgressView().controlSize(.small).tint(.white) } else { Image(systemName: "sparkles") }
                 Text(busy ? "Enhancing…" : entry.enhanced == nil ? "Enhance with AI" : "Enhance again")
             }
-            .font(.system(size: 14, weight: .semibold)).padding(.horizontal, 14).padding(.vertical, 8)
+            .font(HaloKit.text(14, .semibold)).padding(.horizontal, 14).padding(.vertical, 8)
             .background(HaloStyle.coral.opacity(hasText ? 1 : 0.35), in: Capsule()).foregroundStyle(.white)
         }
         .buttonStyle(.plain).fixedSize().disabled(busy || !hasText)
@@ -210,7 +210,7 @@ private struct NotePage: View {
             GeometryReader { geometry in inkLayer(width: geometry.size.width) }
             if entry.drawing == nil {
                 Text("Write or sketch with your Pencil. Tap Enhance and Halo reads your handwriting, organizes it, fills in the gaps and adds a diagram where it helps.")
-                    .font(.system(size: 18)).lineSpacing(5).foregroundStyle(.secondary.opacity(0.7))
+                    .font(HaloKit.text(18)).lineSpacing(5).foregroundStyle(.secondary.opacity(0.7))
                     .padding(.horizontal, 34).padding(.top, 8).allowsHitTesting(false)
             }
         }
@@ -229,7 +229,7 @@ private struct NotePage: View {
                     .gesture(DragGesture(minimumDistance: 0)
                         .onChanged { loop.append($0.location) }
                         .onEnded { _ in finishCircle() })
-                Text("Circle the part you want Halo to look at").font(.footnote.weight(.semibold)).foregroundStyle(.white)
+                Text("Circle the part you want Halo to look at").font(HaloKit.text(13, .semibold)).foregroundStyle(.white)
                     .padding(.horizontal, 12).padding(.vertical, 7).background(HaloStyle.coral, in: Capsule())
                     .frame(maxWidth: .infinity).padding(.top, 12).allowsHitTesting(false)
                 LoopShape(points: loop).stroke(HaloStyle.coral, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)).allowsHitTesting(false)
@@ -278,7 +278,7 @@ private struct NotePage: View {
                     HStack(spacing: 2) {
                         Button { store.removeRefinement(kept.id, from: entry.id) } label: { Image(systemName: "trash").frame(width: 30, height: 30) }.accessibilityLabel("Remove Halo’s note")
                         Button { withAnimation { _ = openCards.remove(kept.id) } } label: { Image(systemName: "chevron.up").frame(width: 30, height: 30) }.accessibilityLabel("Fold away")
-                    }.font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary).buttonStyle(.plain).padding(6)
+                    }.font(HaloKit.text(12, .semibold)).foregroundStyle(.secondary).buttonStyle(.plain).padding(6)
                 }
                 .padding(16).frame(width: 330, alignment: .leading)
                 .background(NoteSheet(frosted: true)).shadow(color: .black.opacity(0.12), radius: 14, y: 6)
@@ -293,7 +293,7 @@ private struct NotePage: View {
                 .padding(.horizontal, 29)
             if text.isEmpty {
                 Text("Write your notes however they come to you: fragments, shorthand, half-finished thoughts. Then tap Enhance and Halo organizes them, fills in the gaps and adds a diagram where it helps.")
-                    .font(.system(size: 18)).lineSpacing(5).foregroundStyle(.secondary.opacity(0.7))
+                    .font(HaloKit.text(18)).lineSpacing(5).foregroundStyle(.secondary.opacity(0.7))
                     .padding(.horizontal, 34).padding(.top, 8).allowsHitTesting(false)
             }
         }
@@ -380,13 +380,13 @@ private struct EnhancedNoteView: View {
         VStack(alignment: .leading, spacing: 24) {
             if circling {
                 Label(missed ? "That circle didn’t go around any of the notes. Try again." : "Circle the points you want Halo to look at", systemImage: "circle.dashed")
-                    .font(.footnote.weight(.semibold)).foregroundStyle(.white)
+                    .font(HaloKit.text(13, .semibold)).foregroundStyle(.white)
                     .padding(.horizontal, 12).padding(.vertical, 7).background(HaloStyle.coral, in: Capsule())
                     .frame(maxWidth: .infinity)
             }
             if stale {
                 Label("You’ve changed your notes since Halo wrote this. Tap Enhance again to bring it up to date.", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .font(HaloKit.text(13)).foregroundStyle(.secondary)
             }
             HStack(alignment: .center, spacing: 12) {
                 HaloRing(size: 34, symbol: "sparkles")
@@ -411,10 +411,10 @@ private struct EnhancedNoteView: View {
             HStack(spacing: 14) {
                 if addedCount > 0 {
                     HStack(spacing: 5) { Image(systemName: "sparkle").foregroundStyle(HaloStyle.ink); Text("added by Halo · everything else is yours, tidied up") }
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(HaloKit.text(12)).foregroundStyle(.secondary)
                 }
                 Spacer()
-                ShareLink(item: note.plainText) { Label("Share", systemImage: "square.and.arrow.up") }.font(.footnote.weight(.semibold))
+                ShareLink(item: note.plainText) { Label("Share", systemImage: "square.and.arrow.up") }.font(HaloKit.text(13, .semibold))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -425,7 +425,7 @@ private struct EnhancedNoteView: View {
             if !section.heading.isEmpty {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text("\(index + 1)").font(HaloKit.hand(34)).foregroundStyle(HaloStyle.coral)
-                    Text(section.heading).font(.system(size: 22, weight: .semibold, design: .serif)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+                    Text(section.heading).font(HaloKit.title(22, .semibold)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
                 }
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { headings[index] = $0 }
             }
@@ -435,7 +435,7 @@ private struct EnhancedNoteView: View {
                         if point.added { Image(systemName: "sparkle").font(.system(size: 11, weight: .bold)).foregroundStyle(HaloStyle.coral) }
                         else { Circle().fill(HaloStyle.coral).frame(width: 5, height: 5).offset(y: -3) }
                     }.frame(width: 12)
-                    Text(point.text).font(.system(size: 16.5)).foregroundStyle(HaloStyle.text).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+                    Text(point.text).font(HaloKit.text(16.5)).foregroundStyle(HaloStyle.text).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.vertical, 2).padding(.horizontal, 4)
                 .background(asked.contains(NotePointRef(section: index, point: number)) ? HaloStyle.coral.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 6))
@@ -454,7 +454,7 @@ private struct EnhancedNoteView: View {
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { pictures[index] = $0 }
                     .transition(.opacity)
             } else if store.drawingPictures.contains("\(entry.id)#\(index)") {
-                HStack(spacing: 9) { ProgressView().controlSize(.small); Text("Halo is drawing a diagram…").font(.footnote).foregroundStyle(.secondary) }
+                HStack(spacing: 9) { ProgressView().controlSize(.small); Text("Halo is drawing a diagram…").font(HaloKit.text(13)).foregroundStyle(.secondary) }
                     .frame(width: 300, height: 110)
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(HaloStyle.ink.opacity(0.12), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
@@ -468,8 +468,8 @@ private struct EnhancedNoteView: View {
             label("WORTH A SECOND LOOK")
             ForEach(Array(corrections.enumerated()), id: \.offset) { _, fix in
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("You wrote: “\(fix.wrote)”").font(.system(size: 14)).foregroundStyle(.secondary).strikethrough(color: HaloStyle.coral.opacity(0.7))
-                    Text(fix.correct).font(.system(size: 16, weight: .medium)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+                    Text("You wrote: “\(fix.wrote)”").font(HaloKit.text(14)).foregroundStyle(.secondary).strikethrough(color: HaloStyle.coral.opacity(0.7))
+                    Text(fix.correct).font(HaloKit.text(16, .medium)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -484,7 +484,7 @@ private struct EnhancedNoteView: View {
                 ForEach(Array(terms.enumerated()), id: \.offset) { _, item in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.term).font(HaloKit.hand(26)).foregroundStyle(HaloStyle.ink)
-                        Text(item.meaning).font(.system(size: 14.5)).foregroundStyle(HaloStyle.text.opacity(0.8)).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                        Text(item.meaning).font(HaloKit.text(14.5)).foregroundStyle(HaloStyle.text.opacity(0.8)).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(14).frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -494,7 +494,7 @@ private struct EnhancedNoteView: View {
         }
     }
     private func label(_ text: String) -> some View {
-        Text(text).font(.system(size: 10.5, weight: .bold)).tracking(1.1).foregroundStyle(.secondary)
+        Text(text).font(HaloKit.text(10.5, .bold)).tracking(1.1).foregroundStyle(.secondary)
     }
 }
 
@@ -597,7 +597,7 @@ private struct RefineCard: View {
             HStack(spacing: 8) {
                 Circle().stroke(HaloStyle.coral, lineWidth: 2.5).frame(width: 14, height: 14)
                 Text(draft.reply == nil ? "Ask Halo about this part" : (draft.ask.isEmpty ? "Halo’s version" : draft.ask.capitalizedFirst))
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1)
+                    .font(HaloKit.text(13, .semibold)).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 4)
                 Button { store.dismissRefine() } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).frame(width: 26, height: 26) }
                     .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Close")
@@ -611,37 +611,37 @@ private struct RefineCard: View {
                 }
                 .frame(maxHeight: 360)
                 HStack(spacing: 8) {
-                    Button(action: keep) { Text(keepTitle).font(.system(size: 14, weight: .semibold)).lineLimit(1).fixedSize().padding(.horizontal, 14).padding(.vertical, 8)
+                    Button(action: keep) { Text(keepTitle).font(HaloKit.text(14, .semibold)).lineLimit(1).fixedSize().padding(.horizontal, 14).padding(.vertical, 8)
                         .background(HaloStyle.coral, in: Capsule()).foregroundStyle(.white) }.buttonStyle(.plain)
-                    if let addBelow { Button("Add below", action: addBelow).font(.system(size: 14, weight: .semibold)).foregroundStyle(HaloStyle.ink) }
+                    if let addBelow { Button("Add below", action: addBelow).font(HaloKit.text(14, .semibold)).foregroundStyle(HaloStyle.ink) }
                     Spacer(minLength: 4)
-                    Button { store.retryRefine() } label: { Label("Ask again", systemImage: "arrow.uturn.backward").font(.system(size: 13, weight: .semibold)).lineLimit(1).fixedSize() }
+                    Button { store.retryRefine() } label: { Label("Ask again", systemImage: "arrow.uturn.backward").font(HaloKit.text(13, .semibold)).lineLimit(1).fixedSize() }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             } else if draft.busy {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
-                    Text(draft.ask.isEmpty ? "Halo is reading it…" : "\(draft.ask.capitalizedFirst)…").font(.system(size: 15)).foregroundStyle(HaloStyle.text).lineLimit(2)
+                    Text(draft.ask.isEmpty ? "Halo is reading it…" : "\(draft.ask.capitalizedFirst)…").font(HaloKit.text(15)).foregroundStyle(HaloStyle.text).lineLimit(2)
                 }.padding(.vertical, 6)
             } else {
                 FlowRow(spacing: 7) {
                     ForEach(Self.chips, id: \.self) { chip in
                         Button { store.runRefine(chip.lowercased()) } label: {
-                            Text(chip).font(.system(size: 13.5, weight: .medium)).padding(.horizontal, 11).padding(.vertical, 6)
+                            Text(chip).font(HaloKit.text(13.5, .medium)).padding(.horizontal, 11).padding(.vertical, 6)
                                 .background(HaloStyle.ink.opacity(0.07), in: Capsule()).foregroundStyle(HaloStyle.ink)
                         }.buttonStyle(.plain)
                     }
                     // Typed and enhanced notes can be looked up on the web: videos, pictures and sources.
                     if looksUp {
                         Button { store.diveFromRefine() } label: {
-                            Label("Look it up", systemImage: "globe").font(.system(size: 13.5, weight: .semibold)).padding(.horizontal, 11).padding(.vertical, 6)
+                            Label("Look it up", systemImage: "globe").font(HaloKit.text(13.5, .semibold)).padding(.horizontal, 11).padding(.vertical, 6)
                                 .background(HaloStyle.coral, in: Capsule()).foregroundStyle(.white)
                         }.buttonStyle(.plain)
                     }
                 }
                 HStack(spacing: 8) {
                     TextField(draft.listening ? "Listening…" : "Or ask anything…", text: ask)
-                        .font(.system(size: 15)).textFieldStyle(.plain).submitLabel(.go).onSubmit { store.runRefine() }
+                        .font(HaloKit.text(15)).textFieldStyle(.plain).submitLabel(.go).onSubmit { store.runRefine() }
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(HaloStyle.ink.opacity(0.12)))
@@ -657,7 +657,7 @@ private struct RefineCard: View {
                     }
                 }
             }
-            if let error = draft.error { Text(error).font(.footnote).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+            if let error = draft.error { Text(error).font(HaloKit.text(13)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
         }
         .padding(16)
         .frame(maxWidth: width, alignment: .leading)
@@ -675,10 +675,10 @@ private struct RefinementView: View {
     let drawing: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            if !title.isEmpty { Text(title).font(.system(size: 16, weight: .semibold, design: .serif)).foregroundStyle(HaloStyle.text).padding(.trailing, 60) }
+            if !title.isEmpty { Text(title).font(HaloKit.title(16, .semibold)).foregroundStyle(HaloStyle.text).padding(.trailing, 60) }
             ForEach(Array(points.enumerated()), id: \.offset) { _, point in
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text(point.added ? "✦" : "–").font(.system(size: point.added ? 11 : 15, weight: .bold)).foregroundStyle(point.added ? HaloStyle.coral : HaloStyle.ink.opacity(0.6))
+                    Text(point.added ? "✦" : "–").font(HaloKit.text(point.added ? 11 : 15, .bold)).foregroundStyle(point.added ? HaloStyle.coral : HaloStyle.ink.opacity(0.6))
                     Text(point.text).font(.custom("Caveat-Regular", size: 23)).foregroundStyle(HaloStyle.ink).lineSpacing(-2).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -686,7 +686,7 @@ private struct RefinementView: View {
                 Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous)).padding(.top, 4)
             } else if drawing {
-                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Halo is drawing a diagram…").font(.footnote).foregroundStyle(.secondary) }.padding(.top, 4)
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Halo is drawing a diagram…").font(HaloKit.text(13)).foregroundStyle(.secondary) }.padding(.top, 4)
             }
         }
     }

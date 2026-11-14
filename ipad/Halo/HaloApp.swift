@@ -8,6 +8,8 @@ struct HaloApp: App {
     @Environment(\.scenePhase) private var scenePhase
     var body: some Scene {
         WindowGroup {
+            // `--avatars`: a sheet of every mood of the character, for looking at it.
+            if CommandLine.arguments.contains("--avatars") { AvatarSheet().preferredColorScheme(.light) } else {
             LibraryView(store: store)
                 .tint(HaloStyle.ink)
                 // Halo is ink on paper. Dark Mode would put white text on the light page.
@@ -17,6 +19,7 @@ struct HaloApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .background { store.lesson.hush(); store.cancelAnswer(); store.speech.stop(); Task { await store.flush(); await store.flushLoose() } }
                 }
+            }
         }
     }
 }
@@ -47,22 +50,22 @@ struct LibraryView: View {
                         HStack {
                             Label("Quick notes", systemImage: "square.and.pencil")
                             Spacer()
-                            if !store.looseNotes.isEmpty { Text("\(store.looseNotes.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+                            if !store.looseNotes.isEmpty { Text("\(store.looseNotes.count)").font(HaloKit.text(12).monospacedDigit()).foregroundStyle(.secondary) }
                         }
                     }
                 }
                 Section("Your library") {
-                    if store.documents.isEmpty { Text("Your lecture slides and reading live here.").font(.footnote).foregroundStyle(.secondary) }
+                    if store.documents.isEmpty { Text("Your lecture slides and reading live here.").font(HaloKit.text(13)).foregroundStyle(.secondary) }
                     ForEach(store.documents) { item in
                         Button { Task { await store.open(item); columns = .detailOnly } } label: {
                             HStack(spacing: 10) {
-                                Image(systemName: "doc.richtext").font(.title3).foregroundStyle(HaloStyle.coral)
+                                Image(systemName: "doc.richtext").font(HaloKit.text(20)).foregroundStyle(HaloStyle.coral)
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.name).font(.subheadline.weight(.medium)).lineLimit(2)
-                                    Text("\(item.pageCount) pages").font(.caption).foregroundStyle(.secondary)
+                                    Text(item.name).font(HaloKit.text(15, .medium)).lineLimit(2)
+                                    Text("\(item.pageCount) pages").font(HaloKit.text(12)).foregroundStyle(.secondary)
                                 }
                                 Spacer(minLength: 0)
-                                if store.document?.id == item.id { Image(systemName: "checkmark").font(.caption).foregroundStyle(HaloStyle.ink) }
+                                if store.document?.id == item.id { Image(systemName: "checkmark").font(HaloKit.text(12)).foregroundStyle(HaloStyle.ink) }
                             }.padding(.vertical, 5)
                         }.buttonStyle(.plain)
                         .contextMenu { Button("Delete from Halo", role: .destructive) { deletion = item } }
@@ -110,6 +113,7 @@ struct LibraryView: View {
 struct StudioView: View {
     @ObservedObject var store: StudyStore
     var openSettings: () -> Void
+    @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         GeometryReader { geometry in
             let session = store.pill != .hidden ? store.activeSession : nil
@@ -134,6 +138,9 @@ struct StudioView: View {
                 Task { try? await Task.sleep(for: .milliseconds(480)); store.ink?.revealCircle() }
             }
         }
+        // "Sup Halo": listen only while this page is on screen and nothing else is using the microphone.
+        .onChange(of: store.wakeAllowed && scenePhase == .active, initial: true) { _, on in store.wake.setEnabled(on) }
+        .onDisappear { store.wake.setEnabled(false) }
         .fullScreenCover(isPresented: $store.showLesson) { LessonBoard(store: store) }
         .fullScreenCover(isPresented: recapCover) { RecapView(store: store) }
         .navigationTitle(store.displayTitle)
@@ -141,28 +148,30 @@ struct StudioView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 1) {
-                    Text(store.displayTitle).font(.headline).lineLimit(1)
-                    if let chapter = store.currentChapter { Text(chapter.title).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+                    Text(store.displayTitle).font(HaloKit.text(17, .semibold)).lineLimit(1)
+                    if let chapter = store.currentChapter { Text(chapter.title).font(HaloKit.text(11)).foregroundStyle(.secondary).lineLimit(1) }
                 }.frame(maxWidth: 420)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 14) {
-                    Button { store.openLesson() } label: { Label("Teach me", systemImage: "point.topleft.down.curvedto.point.bottomright.up") }.accessibilityLabel("Teach me this chapter")
-                    // Chapters, your sticky notes and search live in one panel.
+                // Three things with words on them; everything else lives behind Halo (tap the avatar) or the "more" menu.
+                HStack(spacing: 16) {
+                    Button { store.openLesson() } label: { Label("Teach me", systemImage: "graduationcap").labelStyle(.titleAndIcon) }.accessibilityLabel("Teach me this chapter")
                     Button { store.openNavigator(store.navigatorTab) } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "text.magnifyingglass")
-                            if noteCount > 0 { Text("\(noteCount)").font(.caption.weight(.semibold).monospacedDigit()) }
+                        HStack(spacing: 4) {
+                            Label("Find", systemImage: "text.magnifyingglass").labelStyle(.titleAndIcon)
+                            if noteCount > 0 { Text("\(noteCount)").font(HaloKit.text(12, .semibold).monospacedDigit()) }
                         }
                     }.accessibilityLabel("Chapters, notes and search")
-                    Button { store.openNotebook() } label: { Image(systemName: "square.and.pencil") }.accessibilityLabel("My notes for this document")
-                    Button { store.openRecap() } label: { Image(systemName: "list.clipboard") }.accessibilityLabel("Session summary")
-                    Button { store.showBrief() } label: { Image(systemName: "sparkles") }
-                        .accessibilityLabel(store.isBook ? "Halo’s read of this chapter" : "Halo’s read of this document")
-                    Text("\(store.pageIndex + 1) / \(store.pdf?.pageCount ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    Button(action: openSettings) { Image(systemName: "gearshape") }.accessibilityLabel("Settings")
+                    .popover(isPresented: $store.showNavigator) { NavigatorView(store: store).frame(minWidth: 420, idealWidth: 420, minHeight: 300, idealHeight: 660) }
+                    Text("\(store.pageIndex + 1) / \(store.pdf?.pageCount ?? 0)").font(HaloKit.text(12).monospacedDigit()).foregroundStyle(.secondary)
+                    Menu {
+                        Button { store.openNotebook() } label: { Label("My notes", systemImage: "square.and.pencil") }
+                        Button { store.openRecap() } label: { Label("Session summary", systemImage: "list.clipboard") }
+                        Button { store.showBrief() } label: { Label(store.isBook ? "Halo’s read of this chapter" : "Halo’s read of this document", systemImage: "sparkles") }
+                        Divider()
+                        Button(action: openSettings) { Label("Settings", systemImage: "gearshape") }
+                    } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("More: notes, summary, settings")
                 }
-                .popover(isPresented: $store.showNavigator) { NavigatorView(store: store).frame(minWidth: 420, idealWidth: 420, minHeight: 300, idealHeight: 660) }
             }
         }
     }
@@ -174,7 +183,8 @@ struct StudioView: View {
         GeometryReader { area in
             ZStack(alignment: .top) {
                 PDFReader(store: store).ignoresSafeArea(edges: .bottom)
-                if let edge, let anchor = store.anchorFrame, let arrow = arrow(from: edge, to: anchor, in: area.size) {
+                // (A question about the whole page has no circle to point at.)
+                if let edge, store.activeSession?.region != nil, let anchor = store.anchorFrame, let arrow = arrow(from: edge, to: anchor, in: area.size) {
                     arrow.stroke(HaloStyle.coral, style: StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round))
                         .shadow(color: .white.opacity(0.9), radius: 1.5).allowsHitTesting(false)
                 }
@@ -185,16 +195,19 @@ struct StudioView: View {
                 }
                 // The Pencil palette owns the bottom edge while writing, so the bar moves up.
                 // (Put away while Halo's margin is open: the conversation has the floor, and the bar would sit on the circle.)
-                if edge == nil {
+                if edge == nil, store.welcome == nil {
+                    // A tap on the page puts Halo's menu away.
+                    if store.showLauncher { Color.black.opacity(0.08).ignoresSafeArea().onTapGesture { store.tuckDock() } }
                     VStack {
-                        if store.tool == .write { toolbar.padding(.top, 12); Spacer() }
-                        else { Spacer(); toolbar.padding(.bottom, 18) }
+                        if store.tool == .write { HaloDock(store: store, atTop: true, wide: area.size.width > 860).padding(.top, 12); Spacer() }
+                        else { Spacer(); HaloDock(store: store, wide: area.size.width > 860).padding(.bottom, 16) }
                     }
                     .animation(.spring(duration: 0.35), value: store.tool)
                     .transition(.opacity)
                 }
+                ConfettiBurst(trigger: store.confetti)
                 if let error = store.error, store.pill == .hidden {
-                    Text(error).font(.footnote).foregroundStyle(.white).padding(.horizontal, 14).padding(.vertical, 9)
+                    Text(error).font(HaloKit.text(13)).foregroundStyle(.white).padding(.horizontal, 14).padding(.vertical, 9)
                         .background(Color.red.opacity(0.9), in: Capsule()).padding(.top, 12)
                         .onTapGesture { store.error = nil }
                 }
@@ -209,40 +222,5 @@ struct StudioView: View {
         let end = CGPoint(x: min(max(anchor.minX, start.x), anchor.maxX), y: min(max(anchor.minY, start.y), anchor.maxY))
         guard hypot(end.x - start.x, end.y - start.y) > 26 else { return nil }
         return NoteTail(from: start, to: end)
-    }
-    private var toolbar: some View {
-        HStack(spacing: 6) {
-            ForEach(ReaderTool.allCases, id: \.self) { tool in
-                Button { store.tool = tool } label: {
-                    Label(tool.rawValue, systemImage: tool == .circle ? "circle.dashed" : tool == .write ? "pencil.tip" : "hand.draw")
-                        .font(.system(size: 13, weight: .semibold)).labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(store.tool == tool ? (tool == .circle ? HaloStyle.coral : HaloStyle.ink) : Color.clear, in: Capsule())
-                        .foregroundStyle(store.tool == tool ? .white : HaloStyle.text)
-                }.buttonStyle(.plain)
-            }
-            Divider().frame(height: 22).padding(.horizontal, 4)
-            Button { store.tutorMode.toggle() } label: {
-                Label("Tutor", systemImage: store.tutorMode ? "graduationcap.fill" : "graduationcap").font(.system(size: 13, weight: .semibold))
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(store.tutorMode ? Color(red: 0.71, green: 0.33, blue: 0.04) : Color.clear, in: Capsule())
-                    .foregroundStyle(store.tutorMode ? .white : HaloStyle.text)
-            }.buttonStyle(.plain).help("Hints instead of answers")
-            if store.tool == .circle {
-                Button { store.circleWithFinger.toggle() } label: {
-                    Image(systemName: store.circleWithFinger ? "hand.point.up.left.fill" : "hand.point.up.left").font(.system(size: 13, weight: .semibold))
-                        .padding(.horizontal, 10).padding(.vertical, 8)
-                        .background(store.circleWithFinger ? HaloStyle.ink.opacity(0.15) : Color.clear, in: Capsule())
-                        .foregroundStyle(HaloStyle.text)
-                }.buttonStyle(.plain).help("Circle with a finger too")
-            }
-            Button { store.askAboutPage(store.pageIndex) } label: {
-                Image(systemName: "bubble.left.and.text.bubble.right").font(.system(size: 13, weight: .semibold)).padding(.horizontal, 10).padding(.vertical, 8).foregroundStyle(HaloStyle.text)
-            }.buttonStyle(.plain).help("Ask about this page")
-            if store.demoMode { Text("DEMO").font(.system(size: 9, weight: .bold)).padding(.horizontal, 6).padding(.vertical, 3).background(.orange.opacity(0.15), in: Capsule()) }
-        }
-        .padding(5)
-        .background(.regularMaterial, in: Capsule())
-        .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
     }
 }

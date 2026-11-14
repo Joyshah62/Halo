@@ -147,11 +147,20 @@ final class BookSearch: ObservableObject {
     }
     private func found(_ selection: PDFSelection) {
         guard let pdf, let page = selection.pages.first, hits.count < Self.limit else { return }
-        let context = selection.copy() as? PDFSelection
-        context?.extend(atStart: 34); context?.extend(atEnd: 72)
-        let snippet = (context?.string ?? selection.string ?? "").split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        hits.append(Hit(page: pdf.index(for: page), snippet: snippet, selection: selection))
+        hits.append(Hit(page: pdf.index(for: page), snippet: Self.snippet(around: selection, on: page), selection: selection))
         if hits.count >= Self.limit { pdf.cancelFindString(); searching = false }
+    }
+    /// The words around a match, starting and ending on whole words ("…the power by one" rather than "he power by one").
+    private static func snippet(around selection: PDFSelection, on page: PDFPage) -> String {
+        let tidy = { (text: Substring) in text.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+        guard let text = page.string, let match = Range(selection.range(at: 0, on: page), in: text) else {
+            return tidy(Substring(selection.string ?? ""))
+        }
+        var start = text.index(match.lowerBound, offsetBy: -40, limitedBy: text.startIndex) ?? text.startIndex
+        if start > text.startIndex, let space = text[start..<match.lowerBound].firstIndex(where: \.isWhitespace) { start = text.index(after: space) }
+        var end = text.index(match.upperBound, offsetBy: 90, limitedBy: text.endIndex) ?? text.endIndex
+        if end < text.endIndex, let space = text[match.upperBound..<end].lastIndex(where: \.isWhitespace) { end = space }
+        return (start > text.startIndex ? "…" : "") + tidy(text[start..<end]) + (end < text.endIndex ? "…" : "")
     }
 }
 
@@ -214,7 +223,7 @@ struct NavigatorView: View {
     @ViewBuilder private var chapterList: some View {
         Section {
             Button { store.openLesson() } label: {
-                Label("Teach me this chapter", systemImage: "graduationcap").font(.headline).foregroundStyle(HaloStyle.ink)
+                Label("Teach me this chapter", systemImage: "graduationcap").font(HaloKit.text(17, .semibold)).foregroundStyle(HaloStyle.ink)
             }
         } footer: { Text("A roadmap from your book, one concept at a time, with questions and room to ask why.") }
         if !store.chapters.isEmpty {
@@ -225,9 +234,9 @@ struct NavigatorView: View {
                         ForEach(chapter.sections) { section in
                             Button { go(section.page) } label: {
                                 HStack {
-                                    Text(section.title).font(.footnote).foregroundStyle(HaloStyle.text).lineLimit(2)
+                                    Text(section.title).font(HaloKit.text(13)).foregroundStyle(HaloStyle.text).lineLimit(2)
                                     Spacer()
-                                    Text("\(section.page + 1)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                    Text("\(section.page + 1)").font(HaloKit.text(12).monospacedDigit()).foregroundStyle(.secondary)
                                 }.padding(.leading, 22).contentShape(Rectangle())
                             }.buttonStyle(.plain)
                         }
@@ -242,8 +251,8 @@ struct NavigatorView: View {
                 ForEach(map.pages, id: \.page) { page in
                     Button { go(page.page - 1) } label: {
                         HStack(spacing: 10) {
-                            Text("\(page.page)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 28, alignment: .trailing)
-                            Text(page.topic.isEmpty ? "Page \(page.page)" : page.topic.capitalized).font(.subheadline).foregroundStyle(HaloStyle.text)
+                            Text("\(page.page)").font(HaloKit.text(12).monospacedDigit()).foregroundStyle(.secondary).frame(width: 28, alignment: .trailing)
+                            Text(page.topic.isEmpty ? "Page \(page.page)" : page.topic.capitalized).font(HaloKit.text(15)).foregroundStyle(HaloStyle.text)
                             Spacer()
                             if page.difficulty >= 3 { Text("tricky").font(HaloKit.hand(19)).foregroundStyle(HaloStyle.coral) }
                             noteBadge(notes.filter { $0.pageIndex == page.page - 1 }.count)
@@ -264,8 +273,8 @@ struct NavigatorView: View {
             Button { go(chapter.start) } label: {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(chapter.title).font(.subheadline.weight(current ? .semibold : .regular)).foregroundStyle(current ? HaloStyle.ink : HaloStyle.text).lineLimit(2)
-                        Text(chapter.start == chapter.end ? "Page \(chapter.start + 1)" : "Pages \(chapter.start + 1)–\(chapter.end + 1)").font(.caption).foregroundStyle(.secondary)
+                        Text(chapter.title).font(HaloKit.text(15).weight(current ? .semibold : .regular)).foregroundStyle(current ? HaloStyle.ink : HaloStyle.text).lineLimit(2)
+                        Text(chapter.start == chapter.end ? "Page \(chapter.start + 1)" : "Pages \(chapter.start + 1)–\(chapter.end + 1)").font(HaloKit.text(12)).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 4)
                     noteBadge(count)
@@ -326,8 +335,8 @@ struct NavigatorView: View {
                 ForEach(search.hits) { hit in
                     Button { store.showNavigator = false; store.jump(to: hit.selection) } label: {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(Self.emphasize(query, in: hit.snippet)).font(.subheadline).foregroundStyle(HaloStyle.text).lineLimit(2)
-                            Text(store.pageLabel(hit.page)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            Text(Self.emphasize(query, in: hit.snippet)).font(HaloKit.text(15)).foregroundStyle(HaloStyle.text).lineLimit(2)
+                            Text(store.pageLabel(hit.page)).font(HaloKit.text(12)).foregroundStyle(.secondary).lineLimit(1)
                         }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                     }.buttonStyle(.plain)
                 }
@@ -361,9 +370,9 @@ struct NoteRow: View {
                 .frame(width: 32, height: 32).background(Color(uiColor: InkPalette.note), in: NoteShape(fold: 8))
                 .shadow(color: .black.opacity(0.14), radius: 2, y: 1)
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.title).font(.subheadline.weight(.medium)).foregroundStyle(HaloStyle.text).lineLimit(2)
+                Text(session.title).font(HaloKit.text(15, .medium)).foregroundStyle(HaloStyle.text).lineLimit(2)
                 if let written = session.firstWritten { Text(written).font(.custom("Caveat-Regular", size: 20)).foregroundStyle(HaloStyle.ink).lineLimit(2) }
-                Text(caption).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(caption).font(HaloKit.text(12)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
         }.padding(.vertical, 3).contentShape(Rectangle())

@@ -67,6 +67,12 @@ final class StudyStore: ObservableObject {
     @Published var refine: RefineDraft?
     /// "Go deeper": what Halo found on the web for a question (nil when the board is closed).
     @Published var dive: DeepDive?
+    /// The way down: the dives that led to this one (oldest first), and any the student has come back up from.
+    @Published var diveBack: [DeepDive] = []
+    @Published var diveAhead: [DeepDive] = []
+    /// A follow-up being asked out loud on the web board, and what has been heard of it so far.
+    @Published var diveListening = false
+    @Published var diveHeard = ""
     private var refineTask: Task<Void, Never>?
     private var pendingPictures: [UUID: (loose: Bool, noteID: UUID, section: Int)] = [:]
     // Upload moment
@@ -83,10 +89,33 @@ final class StudyStore: ObservableObject {
     private var scripted = false
     // Halo watches you work
     @Published var watchWork: Bool { didSet { UserDefaults.standard.set(watchWork, forKey: "halo.watchWork") } }
+    /// Listen for "Sup Halo" while a document is open. Off until the student switches it on (it keeps the microphone open).
+    @Published var wakeWord: Bool {
+        didSet {
+            UserDefaults.standard.set(wakeWord, forKey: "halo.wakeWord")
+            if wakeWord, !oldValue { Task { await speech.requestPermissions(); wake.retry() } }
+        }
+    }
     /// The working Halo is looking at right now (a small mark shows on the page while it checks).
     @Published var glance: (page: Int, region: PageRegion)?
     /// Printed text Halo is pointing at while it speaks the current step (it fades when the step ends).
     @Published var pointer: PagePointing?
+    // Halo, the companion: the avatar that sits by the page, reacts to what happens and takes any request.
+    @Published var haloReaction: TutorMood?
+    @Published var haloReactionUntil = Date.distantPast
+    /// A short line in a bubble by the avatar ("3 in a row!"); it clears itself.
+    @Published var haloSays: String?
+    @Published var haloAwakeAt = Date()
+    @Published var showLauncher = false
+    /// The bar beside the avatar (ask field and page tools). Put away until the avatar is tapped.
+    @Published var showDock = false
+    /// Steps of working Halo has ticked in a row, and a counter that fires confetti.
+    @Published var streak = 0
+    @Published var confetti = 0
+    private var haloSaysTask: Task<Void, Never>?
+    /// "Why am I stuck?": the plan the deep agent wrote for itself, and what it is doing right now.
+    @Published var agentTodos: [AgentTodo] = []
+    @Published var agentStage = ""
     private var pauseTask: Task<Void, Never>?
     private var checkTask: Task<Void, Never>?
     private var checkGeneration = UUID()
@@ -96,7 +125,8 @@ final class StudyStore: ObservableObject {
     let speech = SpeechInput()
     weak var ink: ReaderControlling?
     weak var notePaper: NoteAnimating?
-    private let player = AnswerPlayer()
+    let player = AnswerPlayer()
+    let wake = WakeListener()
     private let client = HaloClient()
     private var repository: DocumentRepository?
     private var answerTask: Task<Void, Never>?
@@ -135,11 +165,27 @@ final class StudyStore: ObservableObject {
         voiceOut = defaults.object(forKey: "halo.voiceOut") as? Bool ?? true
         tutorMode = defaults.bool(forKey: "halo.tutorMode")
         watchWork = defaults.object(forKey: "halo.watchWork") as? Bool ?? true
+        wakeWord = defaults.bool(forKey: "halo.wakeWord")
         learner = (defaults.data(forKey: "halo.learner")).flatMap { try? JSONDecoder().decode(LearnerProfile.self, from: $0) } ?? LearnerProfile()
         needsOnboarding = !defaults.bool(forKey: "halo.onboarded")
         do { repository = try DocumentRepository() } catch { self.error = "Halo couldn’t open its local library: \(error.localizedDescription)" }
         speech.onTranscript = { [weak self] text in self?.heard(text) }
         speech.onStopped = { [weak self] in self?.listeningStopped() }
+        speech.onActive = { [weak wake] in wake?.hold("speech", $0) }
+        player.onActive = { [weak wake] in wake?.hold("player", $0) }
+        wake.onWake = { [weak self] in self?.heardWakeWord($0) }
+    }
+    /// "Sup Halo" is only listened for on the bare page: not while a conversation, lesson, summary or notebook is open.
+    var wakeAllowed: Bool {
+        wakeWord && pdf != nil && pill == .hidden && !showLesson && !showRecap && !showNotebook && dive == nil && refine == nil
+    }
+    /// "Sup Halo" on its own starts a spoken question about this page; anything said after it goes straight to Halo.
+    private func heardWakeWord(_ rest: String) {
+        guard wakeAllowed else { return }
+        haloAwakeAt = Date()
+        withAnimation(.spring(duration: 0.3)) { showDock = false; showLauncher = false }
+        showNavigator = false
+        if rest.isEmpty { askAboutPage(pageIndex) } else { askHalo(rest) }
     }
 
     func openLesson(_ chapter: Chapter? = nil) {
@@ -246,6 +292,7 @@ final class StudyStore: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
     func changePage(_ index: Int) {
+        stir()
         guard let pdf, index >= 0, index < pdf.pageCount, index != notes.pageIndex else { return }
         notes.pageIndex = index
         saveLater()
@@ -771,7 +818,7 @@ final class StudyStore: ObservableObject {
         if notes.sessions.count != before { saveLater() }
     }
     func setDraft(_ value: String) { updateSession { $0.draft = value } }
-    func saveDrawing(_ data: Data, page: Int) { notes.drawings[page] = data; saveLater(); workChanged(on: page) }
+    func saveDrawing(_ data: Data, page: Int) { stir(); notes.drawings[page] = data; saveLater(); workChanged(on: page) }
     private func updateSession(_ update: (inout StudySession) -> Void) {
         guard let index = notes.sessions.firstIndex(where: { $0.id == selectedSessionID }) else { return }
         update(&notes.sessions[index]); saveLater()
@@ -884,7 +931,7 @@ final class StudyStore: ObservableObject {
                         guard generation == token else { return }
                         try await Task.sleep(for: .milliseconds(200))
                     case .done: didFinish = true
-                    case .verdict, .lesson: break
+                    case .verdict, .lesson, .agent: break
                     case .failure(let message): throw NSError(domain: "HaloServer", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
                     }
                 }
@@ -968,6 +1015,7 @@ final class StudyStore: ObservableObject {
             var ticks = notes.ticks ?? [:]
             if !(ticks[page] ?? []).contains(where: { abs($0.y - region.y) < max(0.012, region.height * 0.6) }) {
                 ticks[page, default: []].append(region); notes.ticks = ticks; saveLater()
+                cheer()
             }
             // They fixed it: the hint has done its job.
             if let open = activeSession, open.origin == "check", open.pageIndex == page, !busy { dismissPill() }
@@ -988,8 +1036,9 @@ final class StudyStore: ObservableObject {
         guard let ring = WorkCapture.ring(around: region, aspect: Double(size.height / max(1, size.width))) else { return }
         cancelAnswer(); dismissWelcome(); discardEmptyNotes()
         lastFlagged[page] = line
+        streak = 0; react(.unsure, seconds: 2)
         var session = StudySession(number: (notes.sessions.map(\.number).max() ?? 0) + 1, pageIndex: page, region: ring.region, lasso: ring.lasso)
-        session.origin = "check"; session.mode = "hint"; session.topic = verdict.topic ?? ""
+        session.origin = "check"; session.mode = "hint"; session.topic = verdict.topic ?? ""; session.check = verdict
         session.title = line.isEmpty ? "A step to check" : "Check: \(line.prefix(60))"
         let asked = line.isEmpty ? "Halo was checking my working" : "Halo was checking my working: \(line)"
         session.messages.append(StudyMessage(role: "user", text: asked))
@@ -1027,6 +1076,174 @@ final class StudyStore: ObservableObject {
         }
     }
 
+    // MARK: - Halo, the companion
+    /// What the avatar is doing, read off what the app is doing.
+    var haloCue: TutorCue {
+        var cue = TutorCue(reaction: haloReaction, reactionUntil: haloReactionUntil)
+        if speech.isRecording { cue.base = .listening }
+        else if case .speaking = pill { cue.speakingUntil = .distantFuture }
+        else if busy || reading != nil || loading { cue.base = .thinking }
+        else if glance != nil || tool == .write { cue.base = .attentive }
+        else { cue.sleepAt = haloAwakeAt.addingTimeInterval(75) }
+        return cue
+    }
+    /// The student did something: Halo is awake and watching.
+    func stir() { if Date().timeIntervalSince(haloAwakeAt) > 5 { haloAwakeAt = Date() } }
+    /// A moment of feeling on the avatar's face, optionally with a few words beside it.
+    func react(_ mood: TutorMood, say: String? = nil, seconds: Double = 2.4) {
+        haloAwakeAt = Date(); haloReaction = mood; haloReactionUntil = Date().addingTimeInterval(seconds)
+        guard let say else { return }
+        haloSaysTask?.cancel()
+        withAnimation(.spring(duration: 0.35, bounce: 0.3)) { haloSays = say }
+        haloSaysTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(seconds, 3.2)))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) { self?.haloSays = nil }
+        }
+    }
+    /// Tapping the avatar: it wakes up, winks, and offers what it can do.
+    func pokeHalo() {
+        let asleep = haloCue.mood(at: Date()) == .sleepy
+        react(.wink, say: asleep ? "I'm up! What do you need?" : nil, seconds: 1.1)
+        // The avatar opens the bar and the menu together, and puts both away again.
+        withAnimation(.spring(duration: 0.4, bounce: 0.2)) { showDock.toggle(); showLauncher = showDock }
+    }
+    /// Puts the bar and the menu away, leaving only the avatar.
+    func tuckDock() {
+        withAnimation(.spring(duration: 0.3)) { showDock = false; showLauncher = false }
+    }
+    /// A step of working was right: the streak grows, and Halo makes a fuss at 3, 5 and every 5 after.
+    private func cheer() {
+        streak += 1
+        let milestone = streak == 3 || (streak >= 5 && streak % 5 == 0)
+        if milestone { confetti += 1 }
+        react(.proud, say: milestone ? "\(streak) in a row! You're flying." : streak > 1 ? "\(streak) in a row" : ["Yes!", "That's right", "Nice step"].randomElement(), seconds: milestone ? 3.2 : 2)
+    }
+
+    /// Anything typed (or said) to Halo, with or without a circle. Halo works out what was meant:
+    /// a place to go, something to open, something to look up, or a question about the page in front of them.
+    func askHalo(_ text: String) {
+        let asked = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !asked.isEmpty else { return }
+        showLauncher = false
+        func matches(_ pattern: String) -> [String]? {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                  let found = regex.firstMatch(in: asked, range: NSRange(asked.startIndex..., in: asked)) else { return nil }
+            return (0..<found.numberOfRanges).map { Range(found.range(at: $0), in: asked).map { String(asked[$0]) } ?? "" }
+        }
+        guard let pdf else {
+            // Nothing open: notes, or the web.
+            if matches(#"^(open |start |take |new |write )?(a |my )?(quick )?notes?\b"#) != nil { openQuickNotes(new: true) } else { startDive(asked) }
+            return
+        }
+        if let page = matches(#"^(?:go to|open|jump to|turn to|show me|take me to)?\s*(?:page|p\.?)\s*(\d+)\W*$"#)?[1], let number = Int(page) {
+            guard number >= 1, number <= pdf.pageCount else { react(.unsure, say: "This one has \(pdf.pageCount) pages"); return }
+            dismissPill(); jump(to: number - 1); react(.happy, say: "Page \(number)")
+        } else if matches(#"^(go to (the )?)?next( page)?\W*$"#) != nil {
+            dismissPill(); jump(to: min(pageIndex + 1, pdf.pageCount - 1)); react(.happy)
+        } else if matches(#"^(go (to (the )?)?)?(previous|last|back)( a| one)?( page)?\W*$"#) != nil {
+            dismissPill(); jump(to: max(pageIndex - 1, 0)); react(.happy)
+        } else if matches(#"\b(teach me|start (a |the )?lesson|quiz me|test me|walk me through (this|the) chapter)\b"#) != nil {
+            dismissPill(); react(.happy, say: "Let's do it"); openLesson()
+        } else if matches(#"\b(recap|summar(y|ise|ize) (of )?(my|the|this|our) (session|notes|questions)|what (did|have) (i|we) (ask|cover|learn)\w*)\b"#) != nil {
+            dismissPill(); openRecap()
+        } else if matches(#"^(open|show|see)( me)? (my )?(notes|notebook)\W*$|^(take|start|write|new) (a )?note\b"#) != nil {
+            dismissPill(); openNotebook()
+        } else if matches(#"^(show( me)?|open)? ?(the )?(chapters?|contents|table of contents|outline)\W*$"#) != nil {
+            dismissPill(); openNavigator(.chapters)
+        } else if matches(#"^(what('s| is) (this|the) (chapter|document|book|pdf|lecture) about|brief me|give me (the|an) overview|overview)\W*$"#) != nil {
+            dismissPill(); showBrief()
+        } else if let query = matches(#"^(?:find|search for|search|look for|where (?:is|are|does it (?:say|mention|talk about)))\s+(.+?)\W*$"#)?[1], !Self.wantsWeb(asked) {
+            dismissPill(); navigatorQuery = query; openNavigator(.chapters); react(.happy, say: "Looking for “\(query.prefix(24))”")
+        } else {
+            // A question. With a note open it is a follow-up there; otherwise it is about this page.
+            if activeSession != nil, pill != .hidden { setDraft(asked); ask() } else { askAboutPage(pageIndex, question: asked) }
+        }
+    }
+
+    // MARK: - Why am I stuck? (deep agent)
+    /// Offered on a note Halo opened for a mistake, until it has been answered once.
+    var canAskWhyStuck: Bool {
+        guard let session = activeSession else { return false }
+        return !demoMode && !busy && session.origin == "check" && session.check != nil && session.stuck == nil
+    }
+    /// The hint said where the mistake is. This asks what is behind it: a deep agent on the server searches the
+    /// student's own book for the idea they are missing, and the answer arrives on the same note.
+    func whyStuck() {
+        guard canAskWhyStuck, let session = activeSession, let verdict = session.check, let pdf else { return }
+        speech.stop(); silenceTask?.cancel(); cancelAnswer()
+        let question = "Why am I stuck?"
+        let token = generation, sessionID = session.id, shouldSpeak = voiceOut, server = serverURL, title = displayTitle
+        // The agent searches the chapter the student is in; a short document is searched whole.
+        let chapter = isBook ? chapters.containing(session.pageIndex) : nil
+        let first = chapter?.start ?? 0, last = min(chapter?.end ?? pdf.pageCount - 1, first + 399, pdf.pageCount - 1)
+        let pages = (first...max(first, last)).compactMap { index -> DigestPage? in
+            guard let text = pdf.page(at: index)?.string, !text.isEmpty else { return nil }
+            return DigestPage(page: index + 1, text: String(text.prefix(6000)), image: nil)
+        }
+        let hint = session.messages.filter { $0.role == "assistant" }.map(\.text).joined(separator: " ")
+        error = nil; busy = true; agentTodos = []; agentStage = ""
+        withAnimation(.easeOut(duration: 0.2)) { pill = .thinking(question) }
+        updateSession { $0.messages.append(StudyMessage(role: "user", text: question)) }
+        answerTask = Task { [weak self] in
+            guard let self else { return }
+            var answer: [String] = [], didFinish = false
+            do {
+                let payload = StuckRequest(verdict: verdict, hint: hint, title: title, chapter: chapter?.title, pages: pages, learner: await learnerSnapshot())
+                for try await event in client.stuck(payload, server: server) {
+                    try Task.checkCancellation()
+                    guard generation == token, selectedSessionID == sessionID else { return }
+                    switch event {
+                    case .agent(.todos(let todos)): withAnimation(.easeOut(duration: 0.2)) { agentTodos = todos }
+                    case .agent(.stage(let doing)): withAnimation(.easeOut(duration: 0.15)) { agentStage = doing }
+                    case .agent(.diagnosis(let found)): updateSession { $0.stuck = found; if !found.gap.isEmpty { $0.topic = found.gap } }
+                    case .step(let step):
+                        answer.append(step.say)
+                        updateSession { $0.messages.append(StudyMessage(role: "assistant", text: step.say, ink: step.ink)) }
+                        withAnimation(.easeOut(duration: 0.2)) { pill = .speaking(step.say) }
+                        guard let current = activeSession else { return }
+                        // A quote on this page is marked while it is spoken; one on another page waits for "Open page".
+                        let target = step.ink.first { $0.type == "point" }?.page.map { $0 - 1 } ?? current.pageIndex
+                        if target == current.pageIndex { point(at: step.ink, page: target) }
+                        let duration = shouldSpeak ? player.duration(of: step) : AnswerPlayer.estimate(step.say)
+                        async let drawing: Void = notePaper?.animate(session: current, duration: duration) ?? ()
+                        if shouldSpeak {
+                            do { try await player.play(step) }
+                            catch is CancellationError { throw CancellationError() }
+                            catch { /* voice trouble: keep going silently */ }
+                        } else { try await Task.sleep(for: .seconds(duration)) }
+                        await drawing
+                        guard generation == token else { return }
+                        try await Task.sleep(for: .milliseconds(200))
+                    case .done: didFinish = true
+                    case .failure(let message): throw NSError(domain: "HaloServer", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+                    default: break
+                    }
+                }
+                guard didFinish else { throw HaloError.incompleteStream }
+                guard generation == token else { return }
+                updateSession {
+                    $0.conversation += [ConversationTurn(role: "user", text: question), ConversationTurn(role: "assistant", text: answer.joined(separator: " "))]
+                    $0.conversation = Array($0.conversation.suffix(20))
+                }
+                withAnimation(.easeOut(duration: 0.25)) { pill = .ready }
+            } catch is CancellationError { return }
+            catch {
+                guard generation == token else { return }
+                withAnimation { pill = .error(error.localizedDescription) }
+            }
+            guard generation == token else { return }
+            pointer = nil; busy = false; agentTodos = []; agentStage = ""; ink?.refresh(); await flush()
+        }
+    }
+    /// Turns to the page the agent found and highlights the sentence it quoted.
+    func openStuckPage() {
+        guard let found = activeSession?.stuck, found.page > 0, let pdfPage = pdf?.page(at: found.page - 1) else { return }
+        jump(to: found.page - 1)
+        let regions = found.quote.isEmpty ? [] : PagePointer.find(found.quote, on: pdfPage, near: nil)
+        if !regions.isEmpty { pointer = PagePointing(page: found.page - 1, regions: regions, style: "highlight"); ink?.refresh() }
+    }
+
     // MARK: - Go deeper (the web)
     /// Did the student ask for something only the web has: a video, pictures, sources, or the long version?
     static func wantsWeb(_ question: String) -> Bool {
@@ -1034,12 +1251,15 @@ final class StudyStore: ObservableObject {
                        options: [.regularExpression, .caseInsensitive]) != nil
     }
     /// Halo looks the question up: a cited explanation, videos (one of which it watches to find the right moment) and pictures.
-    func startDive(_ question: String, context: String = "") {
+    /// `deeper` keeps the dive on show as a step on the way down, so the student can come back up to it.
+    func startDive(_ question: String, context: String = "", deeper: Bool = false) {
         let asked = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !asked.isEmpty else { return }
+        stopDiveListening()
         diveTask?.cancel(); diveVoice?.cancel(); diveVoice = nil; player.stop(); speech.stop()
         let fresh = DeepDive(question: asked, context: context)
-        withAnimation(.spring(duration: 0.5, bounce: 0.12)) { dive = fresh }
+        let earlier = deeper ? diveBack + [dive?.settled].compactMap { $0 } : []
+        withAnimation(.spring(duration: 0.5, bounce: 0.12)) { diveBack = earlier; diveAhead = []; dive = fresh }
         let id = fresh.id, server = serverURL, title = document == nil ? "" : displayTitle
         diveTask = Task { [weak self] in
             guard let self else { return }
@@ -1066,6 +1286,7 @@ final class StudyStore: ObservableObject {
             let answer = try await client.diveAnswer(request, server: server)
             guard dive?.id == id else { return }
             withAnimation(.spring(duration: 0.55, bounce: 0.15)) { self.dive?.answer = answer }
+            react(.happy, seconds: 1.8)
             if !answer.say.isEmpty { narrate(answer.say, audio: answer.audio, for: id) }
         } catch {
             guard !Task.isCancelled, dive?.id == id else { return }
@@ -1122,8 +1343,70 @@ final class StudyStore: ObservableObject {
     }
     private func hushDive() { diveVoice?.cancel(); diveVoice = nil; player.stop(); dive?.caption = nil }
     func closeDive() {
-        diveTask?.cancel(); hushDive()
-        withAnimation(.easeInOut(duration: 0.3)) { dive = nil }
+        stopDiveListening(); diveTask?.cancel(); hushDive()
+        withAnimation(.easeInOut(duration: 0.3)) { dive = nil; diveBack = []; diveAhead = [] }
+    }
+    /// One level further down from the dive on show: a follow-up, a suggestion, or one part of the answer (`about`).
+    func diveDeeper(_ question: String, about part: String = "") {
+        guard let current = dive else { startDive(question); return }
+        var lines = ["This follows an earlier question, “\(current.question)” (about \(current.plan?.title ?? "the same topic"))."]
+        if let takeaway = current.answer?.takeaway, !takeaway.isEmpty { lines.append("Halo already told them: \(takeaway)") }
+        if !part.isEmpty { lines.append("The part they want to dig into:\n\(String(part.prefix(900)))") }
+        startDive(question, context: lines.joined(separator: "\n\n"), deeper: true)
+    }
+    /// Back up (or down again) to a dive already made on this trip. Nothing is looked up again.
+    func revisitDive(_ id: UUID) {
+        let all = diveBack + [dive?.settled].compactMap { $0 } + diveAhead
+        guard dive?.id != id, let index = all.firstIndex(where: { $0.id == id }) else { return }
+        stopDiveListening(); diveTask?.cancel(); hushDive()
+        withAnimation(.spring(duration: 0.5, bounce: 0.12)) {
+            diveBack = Array(all[..<index]); diveAhead = Array(all[(index + 1)...]); dive = all[index]
+        }
+    }
+    /// Asking the next question out loud: the mic is borrowed from circle-and-ask, and handed back afterwards.
+    func listenForDive() {
+        guard dive != nil else { return }
+        if diveListening { speech.stop(); return }
+        hushDive()
+        speech.onTranscript = { [weak self] text in self?.diveHeardMore(text) }
+        speech.onStopped = { [weak self] in self?.diveListeningStopped() }
+        diveHeard = ""
+        withAnimation(.spring(duration: 0.3)) { diveListening = true }
+        Task { [weak self] in
+            guard let self else { return }
+            do { try await speech.start() } catch { diveListeningStopped() }
+        }
+    }
+    private func diveHeardMore(_ text: String) {
+        guard diveListening else { return }
+        diveHeard = text
+        // A pause after speech means the question is finished.
+        silenceTask?.cancel()
+        silenceTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1600))
+            guard let self, !Task.isCancelled, diveListening, !diveHeard.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+            speech.stop()
+        }
+    }
+    private func diveListeningStopped() {
+        restoreSpeech(); silenceTask?.cancel()
+        let was = diveListening, heard = diveHeard.trimmingCharacters(in: .whitespacesAndNewlines)
+        withAnimation(.spring(duration: 0.3)) { diveListening = false }
+        diveHeard = ""
+        if was, !heard.isEmpty { diveDeeper(heard) }
+    }
+    func stopDiveListening() {
+        guard diveListening else { return }
+        diveListening = false; diveHeard = ""; silenceTask?.cancel()
+        restoreSpeech(); speech.stop()
+    }
+    /// Halo's face on the web board: listening, saying what it found, searching, or pleased with what it brought back.
+    var diveCue: TutorCue {
+        var cue = TutorCue(base: .attentive, reaction: haloReaction, reactionUntil: haloReactionUntil)
+        if diveListening { cue.base = .listening }
+        else if dive?.caption != nil { cue.speakingUntil = .distantFuture }
+        else if dive?.searching == true, dive?.answer == nil { cue.base = .thinking }
+        return cue
     }
     /// Shows another of the videos, and has Halo watch that one too.
     func selectVideo(_ video: DiveVideo) {
@@ -1185,6 +1468,15 @@ final class StudyStore: ObservableObject {
         if let question = value("--dive") {
             // `--dive "why is the sky blue?" [--dive-play]`: straight to the web board from the start screen.
             scripted = true; startDive(question)
+            // `--dive-then "a follow-up|another"`: goes a level deeper each time an answer lands. `--dive-up` then comes back to the first.
+            for next in (value("--dive-then") ?? "").split(separator: "|").map(String.init) {
+                for _ in 0..<180 where dive?.answer == nil && dive?.error == nil { try? await Task.sleep(for: .seconds(0.5)) }
+                try? await Task.sleep(for: .seconds(1)); diveDeeper(next)
+            }
+            if args.contains("--dive-up"), let first = diveBack.first {
+                for _ in 0..<180 where dive?.answer == nil && dive?.error == nil { try? await Task.sleep(for: .seconds(0.5)) }
+                try? await Task.sleep(for: .seconds(1)); revisitDive(first.id)
+            }
             if args.contains("--dive-play") {
                 for _ in 0..<60 where dive?.moments.isEmpty != false && dive?.watched.isEmpty != false { try? await Task.sleep(for: .seconds(0.5)) }
                 playVideo(from: dive?.selected.flatMap { dive?.moments[$0]?.start } ?? 0)
@@ -1263,6 +1555,10 @@ final class StudyStore: ObservableObject {
                 circled(lasso, region: region, on: pageIndex)
             }
         }
+        // `--say "go to page 2"`: anything typed into Halo's bar. `--launcher` opens the avatar's menu. `--cheer N` ticks N steps.
+        if args.contains("--launcher") { pokeHalo() }
+        if let count = value("--cheer").flatMap(Int.init) { for _ in 0..<count { cheer(); try? await Task.sleep(for: .milliseconds(250)) } }
+        if let said = value("--say") { try? await Task.sleep(for: .milliseconds(400)); askHalo(said) }
         if let question = value("--ask") {
             try? await Task.sleep(for: .milliseconds(400))
             if activeSession == nil { askAboutPage(pageIndex) }
@@ -1398,5 +1694,13 @@ struct DeepDive: Equatable {
     var error: String?
     var saved = false
     var video: DiveVideo? { videos?.first { $0.id == selected } }
+    /// This dive as it is kept on the trail: only if Halo got as far as an answer, with nothing still in flight.
+    var settled: DeepDive? {
+        guard answer != nil else { return nil }
+        var kept = self
+        kept.videos = videos ?? []; kept.images = images ?? []; kept.watching = []
+        kept.playing = false; kept.caption = nil; kept.error = nil
+        return kept
+    }
     var searching: Bool { error == nil && (plan == nil || answer == nil || videos == nil || images == nil || !watching.isEmpty) }
 }

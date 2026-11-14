@@ -16,7 +16,7 @@ struct WelcomeCard: View {
                         HaloRing(size: 44, symbol: "checkmark").padding(.top, 2)
                         VStack(alignment: .leading, spacing: 4) {
                             Eyebrow("Halo read it first", color: HaloStyle.coral)
-                            Text(map.title).font(.system(size: 27, design: .serif)).foregroundStyle(HaloStyle.text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                            Text(map.title).font(HaloKit.title(27)).foregroundStyle(HaloStyle.text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 8)
                         CloseButton { store.dismissWelcome() }
@@ -29,7 +29,7 @@ struct WelcomeCard: View {
                     HStack(alignment: .top, spacing: 9) {
                         Image(systemName: "waveform").font(.system(size: 14, weight: .semibold)).foregroundStyle(HaloStyle.coral)
                             .symbolEffect(.variableColor.iterative, isActive: revealed < map.keyIdeas.count).padding(.top, 3)
-                        Text(map.say).font(.system(size: 16.5)).foregroundStyle(HaloStyle.text).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+                        Text(map.say).font(HaloKit.text(16.5)).foregroundStyle(HaloStyle.text).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
                     }
                     Sticky(label: "The three ideas to keep", tilt: -0.6) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -133,7 +133,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 22) {
                 PageHeader(eyebrow: "Make it yours", title: profile.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Hey. I’m Halo." : "Nice to meet you, \(profile.name.trimmingCharacters(in: .whitespaces)).",
                            note: "tell me a little about you, and I’ll explain things your way") {
-                    Button("Skip") { store.finishOnboarding(nil); dismiss() }.font(.system(size: 15, weight: .medium)).foregroundStyle(.secondary).padding(.top, 8)
+                    Button("Skip") { store.finishOnboarding(nil); dismiss() }.font(HaloKit.text(15, .medium)).foregroundStyle(.secondary).padding(.top, 8)
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     Eyebrow("About you")
@@ -159,7 +159,7 @@ struct OnboardingView: View {
                 Button { store.finishOnboarding(profile); dismiss() } label: { Label("Let’s go", systemImage: "arrow.right").frame(maxWidth: .infinity).padding(.vertical, 3) }
                     .buttonStyle(PillButtonStyle()).arrives(5)
                 Text("This stays on your iPad and goes to your Halo server with each question so the explanation fits you. Change it any time in Settings.")
-                    .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                    .font(HaloKit.text(13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 30).padding(.top, 30).padding(.bottom, 34)
         }
