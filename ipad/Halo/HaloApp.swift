@@ -313,8 +313,8 @@ struct StudioView: View {
                     // A tap on the page puts Halo's menu away.
                     if store.showLauncher { Color.black.opacity(0.08).ignoresSafeArea().onTapGesture { store.tuckDock() } }
                     VStack {
-                        if store.tool == .write { HaloDock(store: store, atTop: true, wide: area.size.width > 860).padding(.top, 12); Spacer() }
-                        else { Spacer(); HaloDock(store: store, wide: area.size.width > 860).padding(.bottom, 16) }
+                        if store.tool == .write { HaloDock(store: store, atTop: true, wide: area.size.width > 860, area: area.size).padding(.top, 12); Spacer() }
+                        else { Spacer(); HaloDock(store: store, wide: area.size.width > 860, area: area.size).padding(.bottom, 16) }
                     }
                     .animation(.spring(duration: 0.35), value: store.tool)
                     .transition(.opacity)

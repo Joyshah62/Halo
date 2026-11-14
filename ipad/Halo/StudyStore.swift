@@ -118,7 +118,9 @@ final class StudyStore: ObservableObject {
     @Published var haloAwakeAt = Date()
     @Published var showLauncher = false
     /// The bar beside the avatar (ask field and page tools). Put away until the avatar is tapped.
-    @Published var showDock = false
+    @Published var showDock = false { didSet { if !showDock { stopDockListening() } } }
+    /// What Halo has heard since its avatar was tapped; nil when it isn't listening from the bar.
+    @Published var dockHeard: String?
     /// Steps of working Halo has ticked in a row, and a counter that fires confetti.
     @Published var streak = 0
     @Published var confetti = 0
@@ -993,6 +995,7 @@ final class StudyStore: ObservableObject {
     }
     func startListening() {
         guard activeSession != nil else { return }
+        stopDockListening()
         player.stop(); silenceTask?.cancel()
         withAnimation(.spring(duration: 0.35)) { pill = .listening("") }
         Task { [weak self] in
@@ -1002,6 +1005,18 @@ final class StudyStore: ObservableObject {
         }
     }
     private func heard(_ text: String) {
+        if dockHeard != nil {
+            dockHeard = text
+            // The same pause that ends a spoken question on a note sends this one.
+            silenceTask?.cancel()
+            silenceTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(1600))
+                guard let self, !Task.isCancelled else { return }
+                let asked = stopDockListening()
+                if !asked.isEmpty { tuckDock(); askHalo(asked) }
+            }
+            return
+        }
         guard case .listening = pill else { return }
         pill = .listening(text); setDraft(text)
         // A pause after speech means the question is finished. No button to press.
@@ -1013,6 +1028,8 @@ final class StudyStore: ObservableObject {
         }
     }
     private func listeningStopped() {
+        // The recogniser gave up on its own (a long silence): the bar stays, ready for typing.
+        if dockHeard != nil { let asked = stopDockListening(); if !asked.isEmpty { tuckDock(); askHalo(asked) }; return }
         if case .listening(let heard) = pill {
             if heard.trimmingCharacters(in: .whitespaces).isEmpty { pill = .typing } else if !busy { ask() }
         }
@@ -1063,8 +1080,14 @@ final class StudyStore: ObservableObject {
                 // What this question was about, kept with it in the history: a later "this one" or "the earlier one" can be told apart.
                 let circled = capture.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
                 about = session.region == nil ? "page \(session.pageIndex + 1)" : circled.isEmpty ? "a circled part of page \(session.pageIndex + 1)" : "page \(session.pageIndex + 1), where I circled: “\(circled.prefix(300))”"
+                // A question about the whole document needs more than the page on screen: chapter titles and text from across it.
+                var whole: String?
+                if session.region == nil, AskRequest.isAboutDocument(question), let pdf {
+                    let contents = chapters.prefix(60).map { "\($0.title) (p. \($0.start + 1))" }.joined(separator: "\n")
+                    whole = (contents.isEmpty ? "" : "Chapters:\n\(contents)\n\n") + AskRequest.sample(pageCount: pdf.pageCount) { pdf.page(at: $0)?.string ?? "" }
+                }
                 let payload = AskRequest(question: question, session: session, image: capture.crop, contextImage: capture.page,
-                                         selectedText: capture.selectedText, pageText: page.string ?? "", title: document.name, documentID: document.id,
+                                         selectedText: capture.selectedText, pageText: page.string ?? "", documentText: whole, title: document.name, documentID: document.id,
                                          tutorMode: hintsOnly, learner: await learnerSnapshot())
                 let events = useDemo ? SampleLesson.answers(tutorMode: hintsOnly, followUp: !session.conversation.isEmpty) : client.ask(payload, server: server)
                 for try await event in events {
@@ -1272,6 +1295,18 @@ final class StudyStore: ObservableObject {
         react(.wink, say: asleep ? "I'm up! What do you need?" : nil, seconds: 1.1)
         // The avatar opens the bar and the menu together, and puts both away again.
         withAnimation(.spring(duration: 0.4, bounce: 0.2)) { showDock.toggle(); showLauncher = showDock }
+        // It also starts listening straight away: say it, type it, or pick from the menu.
+        guard showDock, !scripted else { return }
+        player.stop(); silenceTask?.cancel(); dockHeard = ""
+        Task { [weak self] in
+            do { try await self?.speech.start() } catch { self?.dockHeard = nil }
+        }
+    }
+    /// Stops listening from the bar and hands back whatever was heard.
+    @discardableResult func stopDockListening() -> String {
+        guard let heard = dockHeard else { return "" }
+        dockHeard = nil; silenceTask?.cancel(); speech.stop()
+        return heard.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     /// Puts the bar and the menu away, leaving only the avatar.
     func tuckDock() {

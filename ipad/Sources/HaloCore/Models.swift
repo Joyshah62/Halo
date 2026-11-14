@@ -502,6 +502,8 @@ public struct AskRequest: Encodable, Sendable {
     public var contextImage: String?
     public var circledText: String
     public var pageText: String
+    /// Text from across the whole document, sent only when the question is about the document rather than the page.
+    public var documentText: String?
     public var pageTitle: String
     public var pageUrl: String
     public var tutorMode: Bool
@@ -511,8 +513,9 @@ public struct AskRequest: Encodable, Sendable {
     /// The reader can mark printed text on the page while Halo talks.
     public var pointing = true
     public var learner: LearnerProfile?
-    public init(question: String, session: StudySession, image: String?, contextImage: String?, selectedText: String, pageText: String, title: String, documentID: UUID, tutorMode: Bool, learner: LearnerProfile? = nil) {
+    public init(question: String, session: StudySession, image: String?, contextImage: String?, selectedText: String, pageText: String, documentText: String? = nil, title: String, documentID: UUID, tutorMode: Bool, learner: LearnerProfile? = nil) {
         self.question = question; self.selectionMode = session.region == nil ? "page" : "crop"
+        self.documentText = documentText.flatMap { $0.isEmpty ? nil : $0 }
         self.conversation = Array(session.conversation.suffix(20))
         self.image = image; self.contextImage = contextImage
         self.circledText = String(selectedText.prefix(2000)); self.pageText = String(pageText.prefix(12000))
@@ -532,6 +535,22 @@ public struct AskRequest: Encodable, Sendable {
         self.tutorMode = tutorMode; self.surface = "panel"; self.pointing = false
         self.previousAnswer = conversation.last(where: { $0.role == "assistant" })?.text
         self.learner = learner.flatMap { $0.isEmpty && $0.struggles.isEmpty ? nil : $0 }
+    }
+    /// "Give me an overview of the document", "summarise the book": the answer is not on the page in front of them.
+    public static func isAboutDocument(_ question: String) -> Bool {
+        func has(_ pattern: String) -> Bool { question.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil }
+        return has(#"\b(document|doc|book|pdf|file|slides|deck|paper|whole|entire|overall|overview|summar\w*|everything)\b"#) && !has(#"\bpage\b"#)
+    }
+    /// Text from across a document within a budget: every page when it fits, evenly spaced pages when it doesn't.
+    // shortcut: a long book gets 300 characters from each of 80 pages, upgrade to retrieval if whole-book answers come back thin
+    public static func sample(pageCount: Int, budget: Int = 24000, text: (Int) -> String) -> String {
+        guard pageCount > 0 else { return "" }
+        let shown = min(pageCount, max(1, budget / 300)), each = budget / shown
+        return (0..<shown).compactMap { slot -> String? in
+            let index = slot * pageCount / shown
+            let words = text(index).trimmingCharacters(in: .whitespacesAndNewlines)
+            return words.isEmpty ? nil : "[Page \(index + 1)] \(words.prefix(each))"
+        }.joined(separator: "\n\n")
     }
 }
 

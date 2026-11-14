@@ -48,7 +48,7 @@ app.delete("/api/history", (_req, res) => { db.clearAll(); res.json({ ok: true }
 // Step cleaning, speakable text and voice/picture preparation live in steps.js (shared with the lesson agent).
 
 // POST /api/ask  → text/event-stream
-// body: { question, image (base64 png/jpeg, no prefix), imageMime, pageText, circledText,
+// body: { question, image (base64 png/jpeg, no prefix), imageMime, pageText, documentText?, circledText,
 //         pageTitle, pageUrl, tutorMode, previousAnswer, parentId }
 app.post("/api/ask", async (req, res) => {
   const b = req.body ?? {};
@@ -76,9 +76,11 @@ app.post("/api/ask", async (req, res) => {
   const images = [];
   if (b.contextImage) images.push({ mime: "image/jpeg", data: b.contextImage, label: "Screenshot of the whole visible page (for context):" });
   if (b.image) images.push({ mime: b.imageMime || "image/png", data: b.image, label: "Close-up of the rectangular section the student selected:" });
+  const documentText = String(b.documentText || "").slice(0, 30000);
   // Asked from inside the 3D explorer: which model the student is holding and the part they touched.
   const explorer = cleanExplorer(b.explorer);
-  const pointing = !explorer && b.pointing === true && Boolean(b.pageText);
+  // Nothing on this page to point at for a question about the whole document, or about a 3D model.
+  const pointing = !explorer && b.pointing === true && Boolean(b.pageText) && !documentText;
   const system = buildSystemPrompt({ surface: b.surface === "panel" ? "panel" : "margin", pointing, supports3D: b.supports3D === true, explorer });
   const userText = buildUserText({
     pointing,
@@ -87,6 +89,7 @@ app.post("/api/ask", async (req, res) => {
     pageUrl: b.pageUrl,
     circledText: (b.circledText || "").slice(0, 2000),
     pageText: (b.pageText || "").slice(0, 12000),
+    documentText,
     previousAnswer: b.previousAnswer,
     tutorMode: Boolean(b.tutorMode),
     selectionMode: b.selectionMode,

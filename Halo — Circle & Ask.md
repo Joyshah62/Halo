@@ -1,5 +1,7 @@
 # Halo — Circle & Ask
 
+> Original plan. The shipped implementation differs: plain TypeScript + esbuild instead of React + Vite; rectangle crop and whole page instead of circle detection in the extension; SQLite only. See [README.md](./README.md) and [ipad/README.md](./ipad/README.md) for current behaviour.
+
 Nov 9, 2026 · @Joy
 
 ## Current interaction update
