@@ -42,12 +42,17 @@ Reply with JSON only:
 export async function plan({ question, context, document, learner }) {
   const q = clip(question, 300);
   if (isMock()) return { title: q.slice(0, 40) || "Your question", say: "Let me look that up for you.", web: q, video: q, wiki: q, image: q };
+  // The plan only chooses search words, and every field below has a fallback from the question itself,
+  // so a failed plan never stops the lookup.
   const raw = await generateJSON({ system: PLAN_SYSTEM, text: [
     `The student asked: "${q || "Explain this in detail"}"`,
     context && `What they were looking at when they asked:\n"""${clip(context, 1500)}"""`,
     document && `It is from: ${clip(document, 120)}`,
     learnerLine(learner),
-  ].filter(Boolean).join("\n\n") });
+  ].filter(Boolean).join("\n\n") }).catch((error) => {
+    console.warn(`[dive] plan fell back to the question itself: ${error.message}`);
+    return {};
+  });
   const title = clip(raw.title, 60) || q.slice(0, 40) || "Your question";
   return {
     title,

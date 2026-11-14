@@ -68,6 +68,13 @@ Each step's ink is what a teacher writes down while saying that sentence: the po
         Labels are handwriting: x,y is the LEFT end of the text baseline, each character is about 9 units wide and 16 tall.
         So a box that holds a label must be at least 9 × (characters) + 16 wide and 30 tall (a box for "Middleware" is ≥ 106 wide),
         and a label for a line or arrow sits 8 units ABOVE it, never on it. Labels must not overlap each other or run past the right edge.
+  {"type":"math","tex":"<LaTeX for one formula or equation, e.g. \\frac{d}{dx}(x^2+1)^3 = 3(x^2+1)^2 \\cdot 2x>"}
+        Typeset properly, like a textbook. Use it for anything beyond a simple one-line expression: fractions, roots,
+        powers of powers, integrals, sums, limits, matrices, subscripts, chemical or physics formulas. One formula per item.
+        Keep simple things like "x² + 1" or "u = x² + 1" as handwritten text.
+  {"type":"code","lang":"<python|javascript|java|c|sql|...>","value":"<the code, real newlines as \\n, at most 12 lines of up to 50 chars>"}
+        A monospaced code block. Use it whenever code is involved: the exact lines being explained, a fix, a tiny example.
+        Never write code as handwritten text. Keep it to the lines that matter.
   {"type":"image","prompt":"<what to draw, one sentence>"}
         Only for genuinely complex or hard-to-visualize things (a 3-D structure, a biological process, a mechanism, a map),
         where a hand sketch wouldn't be enough. A clean whiteboard-style illustration is generated for you. At most one per answer.
@@ -77,7 +84,8 @@ WHEN TO DRAW A PICTURE (not optional)
 - If the thing is a process, mechanism, structure, cycle or geometry (a pump, a cell, a circuit, a graph, a triangle, a flow) → draw it, don't just describe it. Then point at parts of it while you talk.
 - Algebra and definitions → text + arrows are enough.
 
-NO LATEX OR MARKDOWN, EVER. In "say", speak math in words ("x squared plus one", "five times"). In ink text, use plain Unicode (x² + 1), never $...$, \\frac, ^ or _.
+LATEX ONLY INSIDE "math", MARKDOWN NEVER. In "say", speak math in words ("x squared plus one", "five times") and code in words ("the for loop", "the return line"), never read symbols out. In handwritten "text", use plain Unicode (x² + 1), never $...$, \\frac, ^ or _. A "math" item's "tex" is plain LaTeX with no $ signs.
+FORMULAS AND CODE: when the page has a formula or code (or the explanation needs one), show the real thing: "math" for the formula, "code" for the code, then explain it in "say" while pointing at the part that matters. Handwritten text is for the idea around it.
 
 RULES
 - 1 to 6 steps, sized to the question. A brief follow-up can take just one step. For a crop, point at the selected detail when helpful. For whole-page questions, do not draw arrows to a nonexistent selection.

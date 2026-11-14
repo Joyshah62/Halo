@@ -5,6 +5,8 @@
 //  - full-quality audio (44.1 kHz / 128 kbps, not phone quality);
 //  - request stitching: each step is told what was already said (`previous_text`),
 //    so its intonation continues the sentence before instead of resetting.
+import { log } from "./logging.js";
+
 const KEY = process.env.ELEVENLABS_API_KEY;
 // Hope: young, natural, clear and calm (shared library). Alexandra was kdmDKE6EkgrWrrykO9Qt;
 // Hailey (VrUPKj92idNr4XrmO032) had audible background noise baked into the voice. Kleo was fZboLjcdZSF1lt1yyuXM.
@@ -18,9 +20,45 @@ const FORMAT = process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128";
 export const ttsEnabled = Boolean(KEY);
 export const ttsVoice = { voice: VOICE, model: MODEL, format: FORMAT, accent: /_v3/.test(MODEL) ? ACCENT || null : null };
 
-/** @param {string} text  @param {{ previous?: string }} [opts] */
-export async function speak(text, { previous = "", timeoutMs = 12000 } = {}) {
-  if (!KEY) return null;
+// ElevenLabs refuses requests beyond a plan's concurrency limit (2 to 5 at once) with a 429, and an answer asks
+// for every step's voice in parallel, a lesson adds its fillers on top. A refused clip used to come back as no
+// audio, and the iPad read that step in Apple's voice: Halo "suddenly changed its voice". So requests queue here
+// (ELEVENLABS_CONCURRENCY, default 3) and a refused, failed or timed-out clip is tried again before giving up.
+const LIMIT = Math.max(1, Number(process.env.ELEVENLABS_CONCURRENCY) || 3);
+let running = 0;
+const waiting = [];
+async function slot() {
+  if (running < LIMIT) { running++; return; }
+  await new Promise((resolve) => waiting.push(resolve));
+}
+function done() {
+  const next = waiting.shift();
+  if (next) next(); else running--;
+}
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** @param {string} text  @param {{ previous?: string, timeoutMs?: number }} [opts] */
+export async function speak(text, opts = {}) {
+  if (!KEY || !String(text ?? "").trim()) return null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await slot();
+    let outcome;
+    try { outcome = await once(text, opts); } finally { done(); }
+    if (outcome.audio) {
+      if (attempt > 1) log("tts.recovered", { attempt, characters: text.length });
+      return outcome.audio;
+    }
+    if (!outcome.retry || attempt === 3) {
+      log("tts.failed", { attempt, status: outcome.status, reason: outcome.reason, characters: text.length }, "warn");
+      return null;
+    }
+    log("tts.retry", { attempt, status: outcome.status, reason: outcome.reason }, "warn");
+    await sleep(attempt * 600);
+  }
+  return null;
+}
+
+async function once(text, { previous = "", timeoutMs = 12000 } = {}) {
   const v3 = /_v3/.test(MODEL);
   const body = {
     text: v3 && ACCENT ? `[${ACCENT} accent] ${text}` : text,
@@ -41,12 +79,14 @@ export async function speak(text, { previous = "", timeoutMs = 12000 } = {}) {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      console.warn("[tts]", MODEL, res.status, (await res.text()).slice(0, 200));
-      return null;
+      const reason = (await res.text()).slice(0, 200);
+      console.warn("[tts]", MODEL, res.status, reason);
+      // Too many at once, or ElevenLabs having a moment: worth another try. A bad key or an empty quota is not.
+      return { status: res.status, reason, retry: res.status === 429 || res.status >= 500 };
     }
-    return Buffer.from(await res.arrayBuffer()).toString("base64");
+    return { audio: Buffer.from(await res.arrayBuffer()).toString("base64") };
   } catch (e) {
     console.warn("[tts] failed:", e.message);
-    return null;
+    return { reason: e.message.slice(0, 200), retry: true };
   }
 }
