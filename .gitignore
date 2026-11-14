@@ -1,0 +1,13 @@
+node_modules/
+extension/dist/
+server/.env
+server/halo.db*
+.DS_Store
+
+ipad/.build/
+ipad/.swiftpm/
+ipad/DerivedData/
+**/xcuserdata/
+*.xcuserstate
+
+voice-samples/
