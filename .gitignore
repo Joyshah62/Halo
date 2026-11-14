@@ -2,6 +2,7 @@ node_modules/
 extension/dist/
 server/.env
 server/halo.db*
+server/memory/
 .DS_Store
 
 ipad/.build/

@@ -13,8 +13,9 @@ export function cleanStep(obj) {
     ? obj.ink.filter((i) => i && INK_TYPES.has(i.type)).filter((i) => i.type !== "point" || typeof i.quote === "string" || Number.isInteger(i.line)).slice(0, 5).map((i) => {
         if (i.type === "point") {
           // A mark on the printed page: found by its exact text (asks) or by a line of the checked working (checks).
+          // `page` is set when the text is on another page of the book ("why am I stuck?" sends them there).
           const style = POINT_STYLES.has(i.style) ? i.style : "highlight";
-          return Number.isInteger(i.line) ? { type: "point", line: i.line, style } : { type: "point", quote: String(i.quote).trim().slice(0, 60), style };
+          return Number.isInteger(i.line) ? { type: "point", line: i.line, style } : { type: "point", quote: String(i.quote).trim().slice(0, 60), style, ...(Number.isInteger(i.page) && i.page > 0 ? { page: i.page } : {}) };
         }
         if (i.type === "sketch") {
           return {

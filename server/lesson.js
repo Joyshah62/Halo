@@ -28,6 +28,7 @@ import { describeLearner } from "./prompt.js";
 import { StepQueue, readLines, despeak } from "./steps.js";
 import * as db from "./db.js";
 import { startMaterial } from "./lesson-material.js";
+import { learnerKey, recordTopics, coveredTopics } from "./learner-memory.js";
 
 const isMock = () => process.env.HALO_MOCK === "1";
 const clip = (value, n) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -78,12 +79,15 @@ Reply with JSON only:
  "concepts": [{"name": "<2 to 6 words, lowercase except names>", "why": "<why it matters or what it unlocks, at most 90 characters>", "page": <the page number where the chapter introduces it>, "kind": "idea"|"definition"|"method"|"example"|"pitfall", "minutes": <1 to 4>,
    "hook": "<the question you ask BEFORE teaching this concept, to get them thinking first>"}]}
 
-The hook is what separates a tutor from a lecture: you find out what they think before you tell them anything. For each concept write one spoken question, at most 26 words, that a student can answer with a guess in a few words WITHOUT having read the chapter: a prediction ("what do you reckon happens to…"), a tiny everyday puzzle the concept will resolve, a concrete case from the chapter to guess at, or "what do you already know about…". It must not need the concept's vocabulary, must not be a quiz on the chapter, and must not give the method or the answer away (never describe the rule inside the question). Make it specific and curious, never "What do you think X is?". For the first concept, open with "So, before I show you anything..." or similar; for later ones, start with a two-to-four word bridge ("Okay, next thing." / "Now, here's a strange one."). Contractions, no LaTeX, maths in words.`;
+The hook is what separates a tutor from a lecture: you find out what they think before you tell them anything. For each concept write one spoken question, at most 26 words, that a student can answer with a guess in a few words WITHOUT having read the chapter: a prediction ("what do you reckon happens to…"), a tiny everyday puzzle the concept will resolve, a concrete case from the chapter to guess at, or "what do you already know about…". It must not need the concept's vocabulary, must not be a quiz on the chapter, and must not give the method or the answer away (never describe the rule inside the question). Make it specific and curious, never "What do you think X is?".
 
-function planText(state) {
+You may be told what this student has covered with Halo before (lessons and practice, with how it went). Use it: a concept they already got can be shorter, and its hook can build on it ("you've seen the power rule... so what happens when…"); one they were still learning or skipped deserves a gentler start; in "say", mention a connection to earlier work only if it is real. Never invent history that isn't listed. For the first concept, open with "So, before I show you anything..." or similar; for later ones, start with a two-to-four word bridge ("Okay, next thing." / "Now, here's a strange one."). Contractions, no LaTeX, maths in words.`;
+
+function planText(state, covered = []) {
   const parts = [];
   const who = describeLearner(state.learner);
   if (who) parts.push(who);
+  if (covered.length) parts.push(`What they have covered with Halo before (topic | how | result | where | last date | times):\n${covered.slice(-30).map((l) => `- ${l}`).join("\n")}`);
   parts.push(`Book or course: ${state.title || "(untitled)"}${state.chapter ? `\nChapter: ${state.chapter}` : ""}`);
   parts.push(`The chapter, page by page:\n${pagesText(state.pages, 48000)}`);
   parts.push("Draw up the roadmap as JSON.");
@@ -107,7 +111,9 @@ const MOCK_PLAN = {
 async function plan(state, config) {
   const emit = emitter(config);
   const voices = fillers();
-  const raw = isMock() ? MOCK_PLAN : await generateJSON({ system: PLAN_SYSTEM, text: planText(state) });
+  // What this learner has been through before, from Halo's memory (Backboard when configured). Never blocks the lesson.
+  const covered = await Promise.race([coveredTopics(learnerKey(state.learnerId)).catch(() => []), sleep(1500).then(() => [])]);
+  const raw = isMock() ? MOCK_PLAN : await generateJSON({ system: PLAN_SYSTEM, text: planText(state, covered) });
   const pageNumbers = state.pages.map((p) => p.page);
   const first = pageNumbers[0];
   const concepts = (Array.isArray(raw.concepts) ? raw.concepts : []).slice(0, 7).map((c, i) => ({
@@ -360,6 +366,11 @@ function mockGrade(state, concept, answer) {
   return { verdict: "almost", say: "You're close... you've got the first half.", steps: [{ say: "Just add the second half: whatever is inside the brackets gets differentiated too, and multiplied on.", ink: [{ type: "text", value: "… × inside′  (don't stop early)" }] }], follow: { ask: "So what's the one piece still missing from your answer?", expected: state.question.expected, hint: state.question.hint }, note: "stops after the outside derivative" };
 }
 
+/** Each concept goes into the learner's memory as it is checked; later checks update the result, not the count. */
+function remember(state, concept, result, first) {
+  recordTopics(learnerKey(state.learnerId), [{ topic: concept.name, how: "lesson", result, book: state.title, page: concept.page, again: !first }]);
+}
+
 async function grade(state, config) {
   const emit = emitter(config);
   const { plan } = state;
@@ -376,6 +387,7 @@ async function grade(state, config) {
   if (reply.action === "skip") {
     const say = state.current + 1 < plan.concepts.length ? "No problem, we'll leave that one for now." : "No problem, let's wrap up.";
     emit("grade", { n: concept.n, verdict: "skipped", say, audio: await speak(say), note: "" });
+    remember(state, concept, "skipped", !transcript.some((x) => x.n === concept.n));
     transcript.push({ n: concept.n, concept: concept.name, ask: state.question.ask, answer: "", verdict: "skipped" });
     const old = mastery.findIndex((m) => m.n === concept.n);
     if (old >= 0) mastery.splice(old, 1);
@@ -398,6 +410,9 @@ async function grade(state, config) {
   const attempts = state.attempts + (verdict === "question" ? 0 : 1);
   const outcome = verdict === "got_it" ? "advance" : "again";
   if (verdict !== "question") {
+    const tries = transcript.filter((x) => x.n === concept.n).length + 1;
+    const result = verdict === "got_it" ? (tries > 1 ? `got it after ${tries} tries` : "got it") : verdict === "almost" ? "nearly there" : "still learning";
+    remember(state, concept, result, tries === 1);
     transcript.push({ n: concept.n, concept: concept.name, ask: state.question.ask, answer, verdict });
     // A miss is a confusion signal: it joins the history the learner profile's weak spots are built from.
     if (verdict !== "got_it") {
@@ -481,7 +496,7 @@ async function wrap(state, config) {
 
 // ---------- graph ----------
 const LessonState = Annotation.Root({
-  id: Annotation(), title: Annotation(), chapter: Annotation(), pages: Annotation(), learner: Annotation(),
+  id: Annotation(), title: Annotation(), chapter: Annotation(), pages: Annotation(), learner: Annotation(), learnerId: Annotation(),
   plan: Annotation(), current: Annotation(), attempts: Annotation(), question: Annotation(), reply: Annotation(),
   teaching: Annotation(), exchanges: Annotation(), material: Annotation(), outcome: Annotation(), mastery: Annotation(), transcript: Annotation(), summary: Annotation(),
   announced: Annotation(), hooked: Annotation(), guess: Annotation(), review: Annotation(), styles: Annotation(),

@@ -66,13 +66,14 @@ Use exactly this shape:
 ## <heading, 2 to 5 words>
 <one paragraph, 2 to 4 sentences>
 
-Three or four sections like that, in the order a good teacher would say them, then two last lines:
+Three or four sections like that, in the order a good teacher would say them, then three last lines:
 TAKEAWAY: <the one sentence to remember>
+NEXT: <three questions a curious student would ask next, each one step deeper than this answer and no more than 8 words, separated by " | ">
 SAY: <two short spoken sentences that give the heart of it, as if said out loud to the student>`;
 
 function parseAnswer(text) {
   const sections = [];
-  let takeaway = "", say = "";
+  let takeaway = "", say = "", next = [];
   for (const block of String(text).split(/\n(?=##\s)/)) {
     const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
     const body = [];
@@ -81,11 +82,13 @@ function parseAnswer(text) {
       if (/^##\s*/.test(line)) heading = line.replace(/^#+\s*/, "").replace(/[*_]/g, "");
       else if (/^\**TAKEAWAY\**\s*:/i.test(line)) takeaway = line.replace(/^\**TAKEAWAY\**\s*:\s*/i, "");
       else if (/^\**SAY\**\s*:/i.test(line)) say = line.replace(/^\**SAY\**\s*:\s*/i, "");
+      // Where the student might go from here: offered as one-tap follow-ups under the answer.
+      else if (/^\**NEXT\**\s*:/i.test(line)) next = line.replace(/^\**NEXT\**\s*:\s*/i, "").split("|").map((q) => clip(q.replace(/\$|\*\*/g, "").replace(/^[\s\-•\d.)]+/, ""), 70)).filter((q) => q.length > 5).slice(0, 3);
       else body.push(line);
     }
     if (heading && body.length) sections.push({ heading: clip(heading[0].toUpperCase() + heading.slice(1), 60), text: clip(body.join(" ").replace(/\$/g, "").replace(/\*\*/g, ""), 900), cites: [] });
   }
-  return { sections: sections.slice(0, 5), takeaway: clip(takeaway.replace(/\$|\*\*/g, ""), 260), say: clip(say.replace(/\$|\*\*/g, ""), 320) };
+  return { sections: sections.slice(0, 5), takeaway: clip(takeaway.replace(/\$|\*\*/g, ""), 260), say: clip(say.replace(/\$|\*\*/g, ""), 320), next };
 }
 
 /** Follows Google's grounding redirect to the real page and reads its title. Never throws. */

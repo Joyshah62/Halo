@@ -6,6 +6,8 @@ import { streamText, generateImage, generateJSON, PROVIDER, MODEL } from "./llm.
 import { speak, ttsEnabled, ttsVoice } from "./tts.js";
 import * as db from "./db.js";
 import { checkWork } from "./tutor.js";
+import { whyStuck } from "./stuck.js";
+import { learnerKey, recordTopics } from "./learner-memory.js";
 import * as web from "./web.js";
 import { cleanStep, despeak, prepareStep } from "./steps.js";
 import { startLesson, continueLesson } from "./lesson.js";
@@ -167,9 +169,10 @@ app.post("/api/ask", async (req, res) => {
 
 // POST /api/check → text/event-stream. "Halo watches you work": the student paused while solving by hand.
 // body: { image (base64 of the working, with the printed problem if it fits), imageMime, problem, pageText,
-//         pageTitle, pageUrl, learner }
+//         pageTitle, pageUrl, learner, learnerId (a correct or wrong result is recorded as practice on that topic) }
 // events: start {} → stage {name} … → verdict { status: correct|wrong|unsure|nothing, line, box {x,y,w,h in 0-1 of
 //         the image}, kind, concept, topic, lines, checks } → meta + step (same shape as /api/ask; only when wrong) → done
+const practising = new Map();   // learner → the problem they were last checked on
 app.post("/api/check", async (req, res) => {
   const b = req.body ?? {};
   if (typeof b.image !== "string" || !b.image) return res.status(400).json({ error: "image required" });
@@ -193,6 +196,14 @@ app.post("/api/check", async (req, res) => {
       db.finishQuestion(qid, { topic: verdict.topic, circledText: (verdict.lines.find((l) => l.n === verdict.line)?.text || "").slice(0, 500), answerText: steps.map((s) => s.say).join(" ") });
     }
     send("verdict", { id: qid, ...verdict });
+    // Solved or slipped, it was practice on this topic: it goes into what the learner has covered.
+    if ((verdict.status === "correct" || verdict.status === "wrong") && verdict.topic) {
+      const page = Number(String(b.pageUrl || "").match(/\/page\/(\d+)/)?.[1]) || 0;
+      // Halo checks after every pause, so one problem counts once; later checks of it only update the result.
+      const who = learnerKey(b.learnerId), again = practising.get(who) === verdict.problem;
+      practising.set(who, verdict.problem);
+      recordTopics(who, [{ topic: verdict.topic, how: "practice", result: verdict.status === "correct" ? "solved it" : "made a mistake", book: String(b.pageTitle || "").split(" · ")[0], page, again }]);
+    }
     if (steps.length) {
       send("meta", { mode: "hint", topic: verdict.topic });
       let said = "";
@@ -207,6 +218,54 @@ app.post("/api/check", async (req, res) => {
     console.log(`[check] ${verdict.status} "${verdict.topic || ""}" ${verdict.lines.length} lines, ${verdict.checks.map((c) => c.result).join(",") || "no checks"} in ${Date.now() - t0}ms${flagged}`);
   } catch (e) {
     console.error("[check] error", e);
+    send("error", { message: e.message || String(e) });
+  } finally {
+    res.end();
+  }
+});
+
+// POST /api/stuck → text/event-stream. "Why am I stuck?": after a caught mistake, a deep agent (stuck.js) finds the idea
+// the student is missing and the page of their own book that teaches it, and remembers the gap for next time.
+// body: { problem, lines: [{ n, source, text }], line, concept, hint, title, chapter, pages: [{ page, text }], learner,
+//         learnerId (the iPad's anonymous device ID; memory is kept per ID, in Backboard when BACKBOARD_API_KEY is set) }
+//         (problem, lines, line and concept are the /api/check verdict's; pages is the chapter or book, as for a lesson)
+// events: start {} → todos { todos: [{ content, status }] } (the agent's own plan, as it changes) and stage { name, say, page? }
+//         (what it is doing right now) → diagnosis { gap, why, page, quote, seenBefore, question }
+//         → meta + step (same shape as /api/ask; the step that sends them to the book carries a `point` with `page`) → done
+app.post("/api/stuck", async (req, res) => {
+  const b = req.body ?? {};
+  const pages = (Array.isArray(b.pages) ? b.pages : []).slice(0, 400).map((p) => ({ page: Number(p?.page) || 0, text: String(p?.text || "").slice(0, 6000) })).filter((p) => p.page > 0 && p.text.trim());
+  const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 24).map((l) => ({ n: Number(l?.n) || 0, source: l?.source === "printed" ? "printed" : "handwritten", text: String(l?.text || "").slice(0, 160) }));
+  if (!lines.length && !(typeof b.problem === "string" && b.problem.trim())) return res.status(400).json({ error: "problem or lines required" });
+
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+  let closed = false;
+  res.on("close", () => { closed = true; });
+  const send = (event, data) => { if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+  const t0 = Date.now();
+  send("start", {});
+  try {
+    const { steps: raw, ...diagnosis } = await whyStuck(
+      { problem: String(b.problem || "").slice(0, 300), lines, line: Number(b.line) || 0, concept: String(b.concept || "").slice(0, 80), hint: String(b.hint || "").slice(0, 240),
+        title: String(b.title || "").slice(0, 120), chapter: String(b.chapter || "").slice(0, 120), pages, learner: b.learner,
+        learnerId: typeof b.learnerId === "string" ? b.learnerId.slice(0, 64) : "" },
+      (event, data) => send(event, { ...data, ms: Date.now() - t0 }),
+    );
+    send("diagnosis", diagnosis);
+    const steps = raw.map(cleanStep).filter(Boolean);
+    if (steps.length) {
+      send("meta", { mode: "hint", topic: diagnosis.gap });
+      let said = "";
+      for (const [index, step] of steps.entries()) {
+        const audio = await prepareStep(step, said);
+        send("step", { index, ...step, audio });
+        said += ` ${step.say}`;
+      }
+    }
+    send("done", { steps: steps.length, ms: Date.now() - t0 });
+    console.log(`[stuck] "${diagnosis.gap}" → p.${diagnosis.page || "?"}${diagnosis.seenBefore ? " (seen before)" : ""}, ${pages.length} pages searched in ${Date.now() - t0}ms`);
+  } catch (e) {
+    console.error("[stuck] error", e);
     send("error", { message: e.message || String(e) });
   } finally {
     res.end();
@@ -389,7 +448,7 @@ const webRoute = (name, run) => async (req, res) => {
 };
 // POST /api/dive/plan { question, context?, document?, learner? } → { title, say, web, video, wiki, image }
 app.post("/api/dive/plan", webRoute("plan", (b) => web.plan(b)));
-// POST /api/dive/answer { question, topic?, context?, learner? } → { sections: [{ heading, text, cites: [n] }], takeaway, say, audio, sources: [{ title, url, site }], searches }
+// POST /api/dive/answer { question, topic?, context?, learner? } → { sections: [{ heading, text, cites: [n] }], takeaway, say, next: [question], audio, sources: [{ title, url, site }], searches }
 app.post("/api/dive/answer", webRoute("answer", (b) => web.answer(b)));
 // POST /api/dive/videos { query } → { videos: [{ id, title, channel, length, views }] }
 app.post("/api/dive/videos", webRoute("videos", async (b) => ({ videos: await web.videos(b.query) })));
@@ -439,7 +498,8 @@ const lessonRoute = (run) => async (req, res) => {
 app.post("/api/lesson/start", lessonRoute((b, send) => {
   const pages = (Array.isArray(b.pages) ? b.pages : []).map((p) => ({ page: Number(p?.page), text: String(p?.text || "").slice(0, 12000) }));
   if (!pages.length) throw new Error("pages required");
-  return startLesson({ title: String(b.title || "").slice(0, 120), chapter: String(b.chapter || "").slice(0, 120), pages, learner: b.learner }, send);
+  return startLesson({ title: String(b.title || "").slice(0, 120), chapter: String(b.chapter || "").slice(0, 120), pages, learner: b.learner,
+        learnerId: typeof b.learnerId === "string" ? b.learnerId.slice(0, 64) : "" }, send);
 }));
 // POST /api/lesson/answer { id, answer, action: "answer" | "skip" | "jump", concept }
 app.post("/api/lesson/answer", lessonRoute((b, send) => {
