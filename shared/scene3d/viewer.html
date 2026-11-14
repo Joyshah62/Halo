@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'">
+  <title>Halo · Explore in 3D</title><link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+  <main>
+    <header><p class="eyebrow">HALO · EXPLORE IN 3D</p><h1 id="title">In your hands</h1><p id="caption"></p></header>
+    <div id="viewport" role="img" aria-label="Interactive model. Use the part buttons below for text descriptions.">
+      <span id="badge"></span>
+      <div id="loading" hidden>Building the model…</div>
+      <div id="label" hidden><i></i><span></span></div>
+      <p id="fallback" role="status" hidden>3D isn’t available on this device. You can still explore every part below.</p>
+    </div>
+    <div class="toolbar" aria-label="View controls">
+      <div id="views" role="group" aria-label="How to look at it" hidden></div>
+      <span id="hint">Drag to turn · pinch or scroll to zoom · tap a part</span>
+      <div><button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="reset">Reset view</button><button id="signal" hidden aria-pressed="false">Trace signal</button></div>
+    </div>
+    <section id="detail" aria-live="polite"><h2 id="part-title"></h2><p id="part-detail"></p><div id="ask" hidden></div></section>
+    <nav id="parts" aria-label="Model parts"></nav>
+    <footer><span id="credit"></span> <a id="source" target="_blank" rel="noopener noreferrer">Reference ↗</a></footer>
+  </main><script src="viewer.js" defer></script>
+</body></html>

@@ -2,6 +2,19 @@ import Foundation
 import HaloCore
 
 final class HaloCoreChecks {
+    func testScene3DStreamingAndPersistence() throws {
+        let json = #"{"index":0,"say":"Follow the axon.","ink":[{"type":"scene3d","model":"neuron","focus":"axon","caption":"Toward the terminals."}]}"#
+        let step = try JSONDecoder().decode(AnswerStep.self, from: Data(json.utf8))
+        let scene = try unwrap(step.ink.first?.scene3D)
+        try expectEqual(scene.model, "neuron"); try expectEqual(scene.focus, "axon")
+        let message = StudyMessage(role: "assistant", text: step.say, ink: step.ink)
+        let restored = try JSONDecoder().decode(StudyMessage.self, from: JSONEncoder().encode(message))
+        try expectEqual(restored.ink.first?.scene3D, scene)
+        let legacy = try JSONDecoder().decode(AnswerStep.self, from: Data(#"{"index":0,"say":"Hello","ink":[{"type":"text","value":"Hello"}]}"#.utf8))
+        try expectNil(legacy.ink.first?.scene3D)
+        let unknown = try JSONDecoder().decode(InkItem.self, from: Data(#"{"type":"scene3d","model":"unknown","caption":""}"#.utf8))
+        try expectNil(unknown.scene3D)
+    }
     func testReverseCropAndClamping() throws {
         let crop = try unwrap(PageRegion.drag(fromX: 500, fromY: 400, toX: 100, toY: 200, pageWidth: 1000, pageHeight: 800))
         try expectEqual(crop.x, 0.1, accuracy: 0.0001)
@@ -138,6 +151,7 @@ private func expectThrows<T>(_ expression: @autoclosure () throws -> T) throws {
     }
     static func run() async throws {
         let checks = HaloCoreChecks()
+        try checks.testScene3DStreamingAndPersistence(); print("PASS: 3D scene decoding, persistence and legacy compatibility")
         try checks.testReverseCropAndClamping(); print("PASS: normalized crop geometry")
         try checks.testSSECommentsCRLFAndMultilineJSON(); print("PASS: streaming SSE decoding")
         try checks.testSSEFailureAndUnknownEvents(); print("PASS: stream failures and unknown events")

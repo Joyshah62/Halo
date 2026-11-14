@@ -43,6 +43,12 @@ final class LessonCoach: ObservableObject {
     @Published var reaction: TutorMood?
     @Published var reactionUntil = Date.distantPast
     @Published var cheers = 0
+    /// Where the lesson is happening right now, for the board to scroll to: "top" (Halo and what it's asking),
+    /// an exhibit ("source", "visual", "example"), the newest move of the worked example, or the end of Halo's notes.
+    /// `beat` changes every time, so the board follows Halo even when it stays on the same card.
+    private(set) var attention = "top"
+    @Published private(set) var beat = 0
+    private func look(_ place: String) { attention = place; beat += 1 }
     let speech = SpeechInput()
     weak var paper: NoteAnimating?
     private let client = HaloClient()
@@ -272,23 +278,27 @@ final class LessonCoach: ObservableObject {
     private func receive(_ event: LessonEvent) async throws {
         try Task.checkCancellation()
         switch event {
-        case .plan(let value): plan = value; try await say(value.say, audio: value.audio)
+        case .plan(let value): plan = value; look("top"); try await say(value.say, audio: value.audio)
         case .concept(let n):
             current = n; selected = n; phase = "source"; exampleMoves = 0; question = nil; showHint = false; demoAttempts = 0
             shown[n] = []; said = ""; guesses[n] = nil
             boards[n] = StudySession(number: n, pageIndex: (plan?.concepts.first { $0.n == n }?.page ?? 1) - 1, region: nil)
+            look("top")
         case .material(let value): materials[value.n] = value
         case .question(let value):
             question = value; showHint = false
             // Everything is on the desk to look back at while they think about the check.
             if value.kind != "hook" { shown[value.n] = (shown[value.n] ?? []) + Self.exhibits.filter { !(shown[value.n] ?? []).contains($0) } }
+            look("top")
             try await say(value.ask, audio: value.audio)
         case .grade(let value):
             grades[value.n] = value
             if value.verdict == "got_it" { react(.happy, cheer: true) } else if value.verdict == "missed" || value.verdict == "almost" { react(.unsure) }
+            look("top")
             try await say(value.say, audio: value.audio)
         case .finish(let value):
             summary = value; selected = 0; question = nil; waiting = false; said = ""
+            look("top")
             react(.happy, for: 3.5, cheer: true)
             try await say(value.say, audio: value.audio)
         }
@@ -303,6 +313,9 @@ final class LessonCoach: ObservableObject {
             if !(shown[current] ?? []).contains(focus) { shown[current, default: []].append(focus) }
             if focus == "example" { exampleMoves += 1 }
             phase = focus
+            look(focus == "example" ? "example-end" : focus)
+        } else {
+            look("notes-end")
         }
         caption = step.say
         let duration = voice && !rushing ? player.duration(of: step) : rushing ? 0.3 : 0.8
@@ -407,6 +420,9 @@ struct LessonBoard: View {
     @State private var showWeb = false
     @State private var introAt = Date()
     @State private var paperWidth: CGFloat = 320
+    /// The last time the student scrolled the board themselves. Halo doesn't pull the page away from them for a moment after.
+    @State private var touchedAt = Date.distantPast
+    @State private var following: Task<Void, Never>?
     @FocusState private var typing: Bool
     init(store: StudyStore) { self.store = store; coach = store.lesson; speech = store.lesson.speech }
 
@@ -427,7 +443,7 @@ struct LessonBoard: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             VStack(spacing: 18) {
-                                header
+                                header.id("top")
                                 journey(wide: wide)
                                 if let summary = coach.summary, coach.selected == 0 {
                                     completion(summary, wide: wide)
@@ -439,9 +455,11 @@ struct LessonBoard: View {
                             .padding(.horizontal, side).padding(.top, 14).padding(.bottom, 24)
                         }
                         .scrollDismissesKeyboard(.interactively)
-                        .onChange(of: coach.phase) { _, phase in
-                            if !onHook { withAnimation { proxy.scrollTo(phase, anchor: .top) } }
-                        }
+                        .modifier(NoticesScrolling { touchedAt = Date() })
+                        // Follow the lesson: wherever Halo is talking, writing or asking, the board scrolls there.
+                        .onChange(of: coach.beat) { _, _ in follow(coach.attention, proxy: proxy) }
+                        .onChange(of: coach.exampleMoves) { old, new in if new > old { follow("example-end", proxy: proxy, asked: !coach.busy) } }
+                        .onChange(of: coach.selected) { _, _ in follow("top", proxy: proxy, asked: true) }
                     }
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         if coach.selected != 0 {
@@ -463,6 +481,25 @@ struct LessonBoard: View {
         .onDisappear { coach.hush() }
         .onChange(of: coach.selected) { _, _ in showWeb = false }
         .onAppear { RemoteImageCache.relay = try? HaloClient.endpoint(store.serverURL, path: "api/dive/picture") }
+    }
+
+    /// Scrolls the board to where the lesson is happening. Halo's own moves wait if the student has just scrolled
+    /// somewhere themselves (a new stop or a question to answer still brings them back); taps the student made always go.
+    private func follow(_ place: String, proxy: ScrollViewProxy, asked: Bool = false) {
+        let important = place == "top"
+        if !asked {
+            guard !viewingEarlier || important else { return }
+            guard important || Date().timeIntervalSince(touchedAt) > 4 else { return }
+        }
+        // Where the new thing sits on screen: the top of a card Halo picks up, the bottom of something that just grew.
+        let anchor: UnitPoint = place.hasSuffix("-end") ? UnitPoint(x: 0.5, y: 0.92) : place == "top" ? .top : UnitPoint(x: 0.5, y: 0.04)
+        following?.cancel()
+        following = Task { @MainActor in
+            // Let the new card, move or line of notes lay out first, so the scroll lands on it rather than above it.
+            try? await Task.sleep(for: .milliseconds(90))
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.55, bounce: 0.08)) { proxy.scrollTo(place, anchor: anchor) }
+        }
     }
 
     // MARK: Header
@@ -681,6 +718,7 @@ struct LessonBoard: View {
     }
     @ViewBuilder private func pictureCard(_ material: LessonMaterial) -> some View {
         VStack(alignment: .leading, spacing: 14) {
+            if let scene = material.scene3d, scene.isSupported { Scene3DCard(store: store, scene: scene) }
             if let visual = material.visual, !visual.nodes.isEmpty {
                 Eyebrow("PICTURE IT", color: HaloStyle.coral)
                 if !visual.title.isEmpty { Text(visual.title).font(HaloKit.title(23)) }
@@ -742,6 +780,8 @@ struct LessonBoard: View {
                 Label(material.status == "searching" ? "Halo's picking a small example…" : "Ask Halo for an example below.", systemImage: "pencil.and.outline").font(HaloKit.hand(23)).foregroundStyle(HaloStyle.ink)
             }
         }.haloCard(padding: 20)
+        // The newest move is at the bottom of the card: this is where the board scrolls when Halo adds one.
+        .overlay(alignment: .bottom) { Color.clear.frame(height: 1).id("example-end") }
     }
     /// From outside the book: a second explanation with its sources, and credited pictures.
     @ViewBuilder private func extras(_ material: LessonMaterial) -> some View {
@@ -795,6 +835,7 @@ struct LessonBoard: View {
             }
             .frame(height: max(180, InkLayout.height(of: coach.board) * max(1, paperWidth - 32) / InkLayout.width))
         }
+        .overlay(alignment: .bottom) { Color.clear.frame(height: 1).id("notes-end") }
         .padding(16)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paperWidth = $0 }
         .background(Color.white, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -996,4 +1037,14 @@ private struct LessonPaper: UIViewRepresentable {
     let session: StudySession
     func makeUIView(context: Context) -> NotePaperView { let view = NotePaperView(); view.isScrollEnabled = false; view.followsPen = false; coach.paper = view; return view }
     func updateUIView(_ view: NotePaperView, context: Context) { coach.paper = view; view.show(session) }
+}
+
+/// Tells the board when the student scrolls it themselves, so following the lesson never fights their finger.
+private struct NoticesScrolling: ViewModifier {
+    let touched: () -> Void
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollPhaseChange { _, phase in if phase == .interacting || phase == .decelerating { touched() } }
+        } else { content }
+    }
 }

@@ -1,0 +1,188 @@
+{
+  "brain": {
+    "title": "The human brain",
+    "summary": "A real human brain, mapped from an anatomical atlas. Touch any part to see what it does, then ask Halo about it.",
+    "source": "https://www.ninds.nih.gov/health-information/public-education/brain-basics/brain-basics-know-your-brain",
+    "kind": "anatomy",
+    "credit": "Anatomy from BodyParts3D, © The Database Center for Life Science, licensed under CC Attribution-Share Alike 2.1 Japan. Simplified and regrouped; colors are for teaching.",
+    "parts": {
+      "frontal": {
+        "label": "Frontal lobe",
+        "group": "Cortex",
+        "detail": "Planning, decisions, personality and self-control. Its lower left side usually holds Broca’s area, which helps you produce speech."
+      },
+      "motor": {
+        "label": "Motor cortex",
+        "group": "Cortex",
+        "detail": "The precentral gyrus: a strip that sends the commands for voluntary movement. Each side controls the opposite side of the body."
+      },
+      "somatosensory": {
+        "label": "Somatosensory cortex",
+        "group": "Cortex",
+        "detail": "The postcentral gyrus: receives touch, pressure, temperature and pain, with the body laid out along it like a map."
+      },
+      "parietal": {
+        "label": "Parietal lobe",
+        "group": "Cortex",
+        "detail": "Combines the senses into a sense of space: where your body is, where things are, and how to reach for them. Also important for attention and number."
+      },
+      "temporal": {
+        "label": "Temporal lobe",
+        "group": "Cortex",
+        "detail": "Hearing, understanding language and recognizing objects and faces. Wernicke’s area, for understanding speech, is usually on the left."
+      },
+      "occipital": {
+        "label": "Occipital lobe",
+        "group": "Cortex",
+        "detail": "The visual cortex. Signals from the eyes arrive here to be turned into edges, color, motion and finally things you see."
+      },
+      "cingulate": {
+        "label": "Cingulate gyrus",
+        "group": "Cortex",
+        "detail": "Wraps around the corpus callosum on the inner surface. Part of the limbic system: links emotion, attention and noticing mistakes."
+      },
+      "insula": {
+        "label": "Insula",
+        "group": "Deep inside",
+        "detail": "Cortex folded deep inside the lateral groove. Senses the state of your own body (heartbeat, hunger, pain) and is involved in taste and emotion."
+      },
+      "corpus-callosum": {
+        "label": "Corpus callosum",
+        "group": "Deep inside",
+        "detail": "About 200 million nerve fibers joining the left and right hemispheres so the two halves can share information."
+      },
+      "thalamus": {
+        "label": "Thalamus",
+        "group": "Deep inside",
+        "detail": "The relay station. Almost every sense except smell passes through here on its way to the cortex. It also helps regulate sleep and alertness."
+      },
+      "hypothalamus": {
+        "label": "Hypothalamus",
+        "group": "Deep inside",
+        "detail": "Keeps the body in balance: temperature, hunger, thirst, the daily body clock. It controls the pituitary gland just below it."
+      },
+      "pituitary": {
+        "label": "Pituitary gland",
+        "group": "Deep inside",
+        "detail": "The pea-sized “master gland”. On orders from the hypothalamus it releases hormones that control growth, stress, reproduction and other glands."
+      },
+      "pineal": {
+        "label": "Pineal gland",
+        "group": "Deep inside",
+        "detail": "A tiny gland that releases melatonin in the dark, helping set the sleep–wake cycle."
+      },
+      "hippocampus": {
+        "label": "Hippocampus",
+        "group": "Deep inside",
+        "detail": "Forms new memories of facts and events and helps you navigate. Damage here makes it hard to store new long-term memories."
+      },
+      "amygdala": {
+        "label": "Amygdala",
+        "group": "Deep inside",
+        "detail": "An almond-shaped cluster that detects threats and attaches emotion, especially fear, to memories."
+      },
+      "fornix": {
+        "label": "Fornix",
+        "group": "Deep inside",
+        "detail": "An arch of fibers carrying signals from the hippocampus to the hypothalamus and nearby structures: a main cable of the memory circuit."
+      },
+      "caudate": {
+        "label": "Caudate nucleus",
+        "group": "Deep inside",
+        "detail": "A C-shaped part of the basal ganglia. Helps with learning habits, goal-directed action and choosing what to do next."
+      },
+      "putamen": {
+        "label": "Putamen",
+        "group": "Deep inside",
+        "detail": "Part of the basal ganglia. Works with the caudate to learn and smooth out practiced movements."
+      },
+      "globus-pallidus": {
+        "label": "Globus pallidus",
+        "group": "Deep inside",
+        "detail": "The output stage of the basal ganglia. It holds movements back until they are wanted, so motion is controlled rather than jerky."
+      },
+      "ventricles": {
+        "label": "Ventricles",
+        "group": "Deep inside",
+        "detail": "Connected chambers filled with cerebrospinal fluid, which cushions the brain and carries away waste."
+      },
+      "optic": {
+        "label": "Optic nerves",
+        "group": "Brainstem and cerebellum",
+        "detail": "Carry signals from each eye. At the optic chiasm half the fibers cross, so each side of the brain sees the opposite half of the view."
+      },
+      "cerebellum": {
+        "label": "Cerebellum",
+        "group": "Brainstem and cerebellum",
+        "detail": "The “little brain”. Fine-tunes movement, balance and timing, and holds more than half of the brain’s neurons."
+      },
+      "midbrain": {
+        "label": "Midbrain",
+        "group": "Brainstem and cerebellum",
+        "detail": "Top of the brainstem. Handles eye movements and reflexes to sights and sounds, and makes dopamine used for movement and reward."
+      },
+      "pons": {
+        "label": "Pons",
+        "group": "Brainstem and cerebellum",
+        "detail": "The bridge between the cerebrum, cerebellum and medulla. Involved in breathing rhythm, sleep, and sensation and movement of the face."
+      },
+      "medulla": {
+        "label": "Medulla oblongata",
+        "group": "Brainstem and cerebellum",
+        "detail": "Runs heartbeat, breathing and blood pressure automatically, and connects the brain to the spinal cord."
+      }
+    }
+  },
+  "neuron": {
+    "title": "Inside a neuron",
+    "summary": "Explore a simplified myelinated neuron. Select a part to see its role, or trace the direction of a signal.",
+    "source": "https://www.nichd.nih.gov/health/topics/neuro/conditioninfo/parts",
+    "parts": {
+      "dendrites": {
+        "label": "Dendrites",
+        "detail": "Branching extensions that receive input from other cells."
+      },
+      "soma": {
+        "label": "Cell body",
+        "detail": "Contains the nucleus and integrates incoming signals."
+      },
+      "axon": {
+        "label": "Axon",
+        "detail": "Carries an action potential away from the cell body toward the terminals."
+      },
+      "myelin": {
+        "label": "Myelin sheath",
+        "detail": "Insulating segments around the axon help electrical signals travel faster. Not every axon is myelinated."
+      },
+      "terminals": {
+        "label": "Axon terminals",
+        "detail": "At a chemical synapse, terminals release neurotransmitters that act on a receiving cell. The receiving cell and synaptic gap are not shown here."
+      }
+    },
+    "kind": "schematic"
+  },
+  "animal-cell": {
+    "title": "Explore an animal cell",
+    "summary": "Look inside a simplified animal cell. Its transparent boundary lets you explore a few of its organelles.",
+    "source": "https://www.medlineplus.gov/genetics/understanding/basics/cell/",
+    "parts": {
+      "membrane": {
+        "label": "Cell membrane",
+        "detail": "The cell’s boundary helps regulate what enters and leaves the cell."
+      },
+      "nucleus": {
+        "label": "Nucleus",
+        "detail": "A membrane-bound compartment that contains most of the cell’s DNA."
+      },
+      "mitochondria": {
+        "label": "Mitochondria",
+        "detail": "Organelles that convert energy from nutrients into ATP, a usable source of chemical energy."
+      },
+      "ribosomes": {
+        "label": "Ribosomes",
+        "detail": "Small structures that assemble proteins using instructions carried by messenger RNA."
+      }
+    },
+    "kind": "schematic"
+  }
+}

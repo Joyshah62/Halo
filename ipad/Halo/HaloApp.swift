@@ -6,10 +6,22 @@ import UniformTypeIdentifiers
 struct HaloApp: App {
     @StateObject private var store = StudyStore()
     @Environment(\.scenePhase) private var scenePhase
+    private var scenePreview: Scene3DSpec? {
+        let args = CommandLine.arguments
+        guard let index = args.firstIndex(of: "--scene3d"), index + 1 < args.count else { return nil }
+        let scene = Scene3DSpec(model: args[index + 1])
+        return scene.isSupported ? scene : nil
+    }
+    init() {
+        // `--export-icons <folder>`: render the app icon and browser icons from the character, then carry on.
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--export-icons"), i + 1 < args.count { MainActor.assumeIsolated { AppIconExport.run(into: args[i + 1]) } }
+    }
     var body: some Scene {
         WindowGroup {
             // `--avatars`: a sheet of every mood of the character, for looking at it.
-            if CommandLine.arguments.contains("--avatars") { AvatarSheet().preferredColorScheme(.light) } else {
+            if let scene = scenePreview { Explorer3DLibrary(store: store, first: scene.model).preferredColorScheme(.light) }
+            else if CommandLine.arguments.contains("--avatars") { AvatarSheet().preferredColorScheme(.light) } else {
             LibraryView(store: store)
                 .tint(HaloStyle.ink)
                 // Halo is ink on paper. Dark Mode would put white text on the light page.
@@ -85,6 +97,7 @@ struct LibraryView: View {
             Button("OK") { store.importError = nil }
         } message: { Text(store.importError ?? "") }
         .sheet(isPresented: $settings) { SettingsView(store: store) }
+        .fullScreenCover(item: $store.explorer) { Explorer3D(store: store, scene: $0) }
         .fullScreenCover(isPresented: Binding(get: { store.showNotebook }, set: { if !$0 { store.closeNotebook() } })) { NotebookView(store: store) }
         .sheet(isPresented: Binding(get: { store.needsOnboarding }, set: { if !$0 { store.finishOnboarding(nil) } })) { OnboardingView(store: store).interactiveDismissDisabled() }
         .alert("Delete from Halo?", isPresented: Binding(get: { deletion != nil }, set: { if !$0 { deletion = nil } })) {

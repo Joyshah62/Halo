@@ -13,6 +13,7 @@ import { whyStuck } from "./stuck.js";
 import { learnerKey, recordTopics } from "./learner-memory.js";
 import * as web from "./web.js";
 import { cleanStep, despeak, prepareStep } from "./steps.js";
+import { catalog as scenes, cleanExplorer } from "../shared/scene3d/schema.js";
 import { startLesson, continueLesson } from "./lesson.js";
 import { installNotesQuiz } from "./notes-quiz.js";
 
@@ -75,8 +76,10 @@ app.post("/api/ask", async (req, res) => {
   const images = [];
   if (b.contextImage) images.push({ mime: "image/jpeg", data: b.contextImage, label: "Screenshot of the whole visible page (for context):" });
   if (b.image) images.push({ mime: b.imageMime || "image/png", data: b.image, label: "Close-up of the rectangular section the student selected:" });
-  const pointing = b.pointing === true && Boolean(b.pageText);
-  const system = buildSystemPrompt({ surface: b.surface === "panel" ? "panel" : "margin", pointing });
+  // Asked from inside the 3D explorer: which model the student is holding and the part they touched.
+  const explorer = cleanExplorer(b.explorer);
+  const pointing = !explorer && b.pointing === true && Boolean(b.pageText);
+  const system = buildSystemPrompt({ surface: b.surface === "panel" ? "panel" : "margin", pointing, supports3D: b.supports3D === true, explorer });
   const userText = buildUserText({
     pointing,
     question: b.question,
@@ -147,7 +150,18 @@ app.post("/api/ask", async (req, res) => {
          { say: "This 2 comes from differentiating x squared.", ink: [{ type: "arrow", to: "circled" }, { type: "text", value: "d/dx (x²) = 2x" }] },
          { say: "The chain rule then multiplies by the derivative of the inside.", ink: [{ type: "text", value: "× inner derivative" }, { type: "underline", target: "previous" }, { type: "point", quote: "chain rule", style: "highlight" }] },
          { say: "So the 2 is just the power coming down in front.", ink: [{ type: "text", value: "power → coefficient" }, { type: "box", target: "previous" }] }];
-    if (b.previousAnswer && !b.tutorMode) mock[1] = { say: "This line is the inner derivative we multiplied by.", ink: [{ type: "arrow", to: "circled" }, { type: "text", value: "u = x² + 1 → u′ = 2x" }] };
+    if (explorer) {
+      // Offline, the explorer still answers from what Halo knows about each part, and still points at the model.
+      const parts = scenes[explorer.model].parts, ids = Object.keys(parts);
+      const first = explorer.focus || ids[0], next = ids[(ids.indexOf(first) + 1) % ids.length];
+      const sentence = (text) => text.split(/(?<=[.!?])\s+/)[0];
+      mock.length = 0;
+      mock.push({ mode: "answer", topic: parts[first].label.toLowerCase() },
+        { say: `This is the ${parts[first].label.toLowerCase()}. ${parts[first].detail}`, ink: [{ type: "scene3d", model: explorer.model, focus: first }, { type: "text", value: sentence(parts[first].detail) }] },
+        { say: `It works closely with its neighbor, the ${parts[next].label.toLowerCase()}.`, ink: [{ type: "scene3d", model: explorer.model, focus: next }, { type: "text", value: `${parts[next].label}: ${sentence(parts[next].detail)}` }] },
+        { say: `So when you think about the ${parts[first].label.toLowerCase()}, picture it as one part of a team.`, ink: [{ type: "scene3d", model: explorer.model, focus: first }, { type: "text", value: `${parts[first].label} never works alone` }] });
+    }
+    if (b.previousAnswer && !b.tutorMode && !explorer) mock[1] = { say: "This line is the inner derivative we multiplied by.", ink: [{ type: "arrow", to: "circled" }, { type: "text", value: "u = x² + 1 → u′ = 2x" }] };
     console.log(`[mock] #${qid} q="${b.question}" tutor=${!!b.tutorMode} followUp=${!!b.previousAnswer} crop=${b.image ? Math.round(b.image.length * 0.75 / 1024) + "KB" : "none"} circledText="${(b.circledText || "").slice(0, 60)}"`);
     if (b.selectionMode === "page") {
       for (const step of mock) if (step.ink) step.ink = step.ink.filter((item) => item.type !== "arrow" || item.to !== "circled");

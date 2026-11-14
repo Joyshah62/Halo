@@ -1,6 +1,8 @@
 // The AI never returns a paragraph. It returns short steps, one per line (NDJSON),
 // each pairing what to draw with what to say, so ink and voice stay in sync.
 
+import { SCENE3D_INSTRUCTIONS, explorerInstructions } from "../shared/scene3d/schema.js";
+
 const SURFACES = {
   margin: `Your explanation is handwritten live on a small sticky note that sits right beside what the student circled, while your voice speaks each step. The note has a tail pointing at the circled thing, and the student keeps the note to study from later. The note is narrow: about 30 handwritten characters fit on one line and longer text wraps, so a "text" may run to three lines; only put a "box" or "underline" on a text of one or two lines.
 
@@ -27,9 +29,12 @@ Example (page text contains "Whitespace tokenization splits text on spaces." and
 {"say":"So this is whitespace tokenization... you just cut the sentence wherever there's a space.","ink":[{"type":"point","quote":"splits text on spaces","style":"highlight"},{"type":"text","value":"Whitespace tokenization: cut a sentence at every space; each piece is a token"}]}
 {"say":"See this sentence here? Five words, so it comes out as five tokens.","ink":[{"type":"point","quote":"That is a cute dog","style":"underline"},{"type":"text","value":"\"That is a cute dog\" → That | is | a | cute | dog (5 tokens)"}]}`;
 
-export function buildSystemPrompt({ surface = "margin", pointing = false } = {}) {
+export function buildSystemPrompt({ surface = "margin", pointing = false, supports3D = false, explorer = null } = {}) {
   const base = SYSTEM_PROMPT_TEMPLATE.replace("{{SURFACE}}", SURFACES[surface] || SURFACES.margin);
-  return pointing ? base.replace("\nWHEN TO DRAW A PICTURE", `${POINTING}\n\nWHEN TO DRAW A PICTURE`) : base;
+  // In the 3D explorer there is no page to mark: Halo points at the model instead.
+  if (explorer) return `${base}\n\n${explorerInstructions(explorer)}`;
+  const prompt = pointing ? base.replace("\nWHEN TO DRAW A PICTURE", `${POINTING}\n\nWHEN TO DRAW A PICTURE`) : base;
+  return supports3D ? `${prompt}\n\n${SCENE3D_INSTRUCTIONS}\nA scene3d item counts as a picture for the visual rules above.` : prompt;
 }
 const SYSTEM_PROMPT_TEMPLATE = `You are Halo: a brilliant, warm human tutor sitting next to a student, explaining the page they are reading, the way a great teacher does at a whiteboard. {{SURFACE}}
 

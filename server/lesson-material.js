@@ -2,6 +2,7 @@
 // never masquerade as quotations or invent source URLs.
 import { generateJSON } from './llm.js';
 import { answer as search, images as pictures } from './web.js';
+import { cleanScene3D, SCENE3D_INSTRUCTIONS } from '../shared/scene3d/schema.js';
 const text = (v, n = 300) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const safeURL = (v) => { try { const u = new URL(v); return u.protocol === 'https:' ? u.href : null; } catch { return null; } };
 const bounded = async (work, ms, fallback) => {
@@ -42,6 +43,7 @@ export function cleanScene(raw, pages, concept) {
   const visual = raw?.visual || {}, example = raw?.example || {};
   return {
     n: concept.n, anchor: anchorQuote(raw?.quote, pages, concept), headline: text(raw?.headline, 100) || concept.why || concept.name,
+    scene3d: cleanScene3D(raw?.scene3d),
     visual: {
       kind: ['flow', 'compare', 'cycle'].includes(visual.kind) ? visual.kind : 'flow', title: text(visual.title, 80),
       nodes: (Array.isArray(visual.nodes) ? visual.nodes : []).slice(0, 4).map((n) => ({ label: text(String(n?.label ?? '').replace(/^\s*\d+[.)]\s+/, ''), 45), detail: text(n?.detail, 130) })).filter((n) => n.label),
@@ -72,7 +74,7 @@ export function startMaterial({ concept, pages, title, learner, mock = false }, 
   const context = pages.map((p) => `Page ${p.page}: ${text(p.text, 2500)}`).join('\n');
   // Retrieve in parallel with scene design: the book appears immediately and the lesson does
   // not have to wait indefinitely for a search engine or image host.
-  const scene = bounded(generate({ system: SYSTEM, text: `Book: ${text(title, 120)}\nConcept: ${concept.name}\nWhy: ${concept.why}\nTextbook:\n${context}` }), 30000, null)
+  const scene = bounded(generate({ system: `${SYSTEM}\n${SCENE3D_INSTRUCTIONS}\nYou may add a top-level "scene3d": {"model":..., "focus":..., "caption":...} when relevant; otherwise omit it. Keep the 2D visual too.`, text: `Book: ${text(title, 120)}\nConcept: ${concept.name}\nWhy: ${concept.why}\nTextbook:\n${context}` }), 30000, null)
     .then((raw) => ({ ...cleanScene(raw || {}, pages, concept), status: 'searching', web: null, images: [] }));
   const reading = bounded(research({ question: `Explain ${concept.name} with one concrete example for a student studying ${text(title, 100)}. Find a university, open textbook, or original authoritative source page. Exclude uploaded document sites and video pages.`, context, learner, narrate: false, concise: true }), 24000, null);
   const found = bounded(images({ wiki: concept.name, query: `${concept.name} diagram`, question: `Help explain ${concept.name} in ${text(title, 100)}` }), 18000, []);

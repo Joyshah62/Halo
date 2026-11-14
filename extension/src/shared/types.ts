@@ -1,4 +1,6 @@
+export interface Scene3DSpec { model: "brain" | "neuron" | "animal-cell"; focus?: string; caption: string }
 export type InkItem =
+  | ({ type: "scene3d" } & Scene3DSpec)
   | { type: "text"; value: string }
   | { type: "arrow"; to: "circled" | "previous" }
   | { type: "underline"; target?: "previous" }
@@ -20,6 +22,7 @@ export interface Meta { mode: "answer" | "hint"; topic: string }
 export interface ConversationTurn { role: "user" | "assistant"; text: string }
 
 export interface AskPayload {
+  supports3D?: boolean;
   selectionMode?: "crop" | "page";
   conversation?: ConversationTurn[];
   question: string;

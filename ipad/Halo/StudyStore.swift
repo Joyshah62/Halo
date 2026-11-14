@@ -74,6 +74,8 @@ final class StudyStore: ObservableObject {
     /// Circle (or select) part of a note and ask Halo to refine it.
     @Published var refine: RefineDraft?
     /// "Go deeper": what Halo found on the web for a question (nil when the board is closed).
+    /// The 3D model on show (opened by asking for it, or from the start screen).
+    @Published var explorer: Scene3DSpec?
     @Published var dive: DeepDive?
     /// The way down: the dives that led to this one (oldest first), and any the student has come back up from.
     @Published var diveBack: [DeepDive] = []
@@ -135,7 +137,7 @@ final class StudyStore: ObservableObject {
     weak var notePaper: NoteAnimating?
     let player = AnswerPlayer()
     let wake = WakeListener()
-    private let client = HaloClient()
+    let client = HaloClient()
     private var repository: DocumentRepository?
     private var answerTask: Task<Void, Never>?
     private var diveTask: Task<Void, Never>?
@@ -696,7 +698,7 @@ final class StudyStore: ObservableObject {
         refine?.listening = false; silenceTask?.cancel()
         restoreSpeech(); speech.stop()
     }
-    private func restoreSpeech() {
+    func restoreSpeech() {
         speech.onTranscript = { [weak self] text in self?.heard(text) }
         speech.onStopped = { [weak self] in self?.listeningStopped() }
     }
@@ -1293,6 +1295,11 @@ final class StudyStore: ObservableObject {
             guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
                   let found = regex.firstMatch(in: asked, range: NSRange(asked.startIndex..., in: asked)) else { return nil }
             return (0..<found.numberOfRanges).map { Range(found.range(at: $0), in: asked).map { String(asked[$0]) } ?? "" }
+        }
+        // "Show me the brain", "explore a neuron in 3D": the model itself, to turn and touch.
+        if let wanted = matches(#"^(?:(?:can you |please )?(?:show|open|explore|see|let me (?:see|explore|touch))(?: me)?|3d) (?:the |a |an |inside (?:the |a )?)?(?:human |3d |animal )?(brain|neuron|nerve cell|cell)(?: (?:model|in 3d|3d))*\W*$"#)?[1].lowercased() {
+            let model = wanted == "brain" ? "brain" : wanted == "cell" ? "animal-cell" : "neuron"
+            react(.happy, say: "Here, hold it"); explorer = Scene3DSpec(model: model); return
         }
         guard let pdf else {
             // Nothing open: notes, or the web.

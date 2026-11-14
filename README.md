@@ -92,6 +92,30 @@ Ink primitives: `text`, `arrow` (to `circled` | `previous`), `underline`, `box`,
 
 Voice: the first step is synthesized with a low-latency model (`eleven_turbo_v2_5`) so the answer starts fast; later steps use `eleven_v3`, the most natural model, generated in the background while step 1 plays. The prompt makes the tutor talk like a person sitting next to you (contractions, "this 2x right here", no "Great question"), and the server strips any LaTeX before it is spoken.
 
+## Explore in 3D
+
+Halo has three models a student can hold: a **human brain**, a **neuron** and an **animal cell**.
+
+The brain is real anatomy: 25 touchable parts (lobes, motor and somatosensory strips, hippocampus, amygdala, thalamus, basal ganglia, ventricles, brainstem, cerebellum…) built from the [BodyParts3D](https://lifesciencedb.jp/bp3d/) atlas. Drag to turn it, pinch to zoom, and switch between **Whole**, **See inside** (the cortex turns to glass), **Cut in half** (the classic midline view) and **Pull apart**. The neuron and cell are simplified schematics.
+
+**Touch a part and ask.** On iPad the explorer is a full screen: the model on one side, Halo on the other. Touching a part names it and says what it does; then tap a suggested question, type, or use the microphone. While Halo answers, each step lights up the part it is talking about and turns the model to show it (opening it up if the part is deep inside), and tapping a line of the answer points at that part again. Without the server, Halo still answers from its notes on each part.
+
+Ways in: the cards on the start screen, "show me the brain" in Halo's bar, or a 3D card that Halo adds to an answer, a lesson or a **Go deeper** board when a model helps. In Chrome the model appears in the explanation panel.
+
+How it fits together:
+
+- [`shared/scene3d/catalog.json`](shared/scene3d/catalog.json): models, part IDs, names and what each part does. The server prompt, the viewer and the iPad app all read it.
+- [`extension/src/scene3d/viewer.ts`](extension/src/scene3d/viewer.ts): the Three.js viewer (rendering, touch, views). Hosts talk to it through `window.halo3d.select(part)` / `setView(view)` / `reset()`, and it reports `ready`, `select` and `view`.
+- [`shared/scene3d/tools/build_brain.py`](shared/scene3d/tools/build_brain.py): turns the atlas meshes into `brain-data.js` (simplified, regrouped, with baked shading). Only needed to change the brain itself.
+- [`ipad/Halo/Scene3DView.swift`](ipad/Halo/Scene3DView.swift): the explorer screen and the ask flow.
+- `/api/ask` takes `explorer: {"model":"brain","focus":"hippocampus"}` for questions asked inside the explorer; answers carry `{"type":"scene3d","model":"brain","focus":"<part>"}` in each step. Only known model and part IDs cross the wire, never code or asset URLs.
+
+After editing the viewer or catalog, run `npm run build` in `extension/`; it also refreshes the checked-in iPad bundle in `ipad/Halo/Resources/Scene3D/`.
+
+Simulator: launch with `--scene3d brain [--touch hippocampus] [--explore-view half] [--explore-ask "what does it do?"]`.
+
+Brain geometry: BodyParts3D, © The Database Center for Life Science, licensed under CC Attribution-Share Alike 2.1 Japan (credited in the viewer). Three.js is MIT.
+
 ## Halo watches you work (`POST /api/check`)
 
 The student solves a problem by hand; when they pause, the client sends an image of the working. A LangGraph agent ([server/tutor.js](server/tutor.js)) decides whether to stay quiet, draw a ✓, or circle the first wrong line and give a hint (never the answer).

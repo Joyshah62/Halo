@@ -125,6 +125,14 @@ public struct InkLabel: Codable, Equatable, Sendable {
     public init(x: Double, y: Double, text: String) { self.x = x; self.y = y; self.text = text }
 }
 public struct InkItem: Codable, Equatable, Sendable {
+    public var model: String?
+    public var focus: String?
+    public var caption: String?
+    public var scene3D: Scene3DSpec? {
+        guard type == "scene3d", let model else { return nil }
+        let spec = Scene3DSpec(model: model, focus: focus, caption: caption ?? "")
+        return spec.isSupported ? spec : nil
+    }
     public var type: String
     public var value: String?
     public var to: String?
@@ -165,6 +173,7 @@ public extension Array where Element == InkItem {
             switch item.type {
             case "text": return item.value.flatMap { $0.isEmpty ? nil : $0 }
             case "image": return item.alt      // "$…$" for a formula, a fenced block for code (set by the server)
+            case "scene3d": return item.scene3D.map { "3D schematic: \($0.title). \($0.caption)" }
             default: return nil
             }
         }
@@ -482,6 +491,9 @@ public struct CheckRequest: Encodable, Sendable {
 }
 
 public struct AskRequest: Encodable, Sendable {
+    public var supports3D = true
+    /// Set when the question comes from the 3D explorer rather than a page.
+    public var explorer: ExplorerContext?
     public var question: String
     public var selectionMode: String
     public var conversation: [ConversationTurn]
@@ -509,6 +521,16 @@ public struct AskRequest: Encodable, Sendable {
         self.tutorMode = tutorMode
         self.previousAnswer = session.conversation.last(where: { $0.role == "assistant" })?.text
         self.parentId = session.parentID
+        self.learner = learner.flatMap { $0.isEmpty && $0.struggles.isEmpty ? nil : $0 }
+    }
+    /// A question about a 3D model the student is holding. There is no page: `about` says what is on screen.
+    public init(question: String, explorer: ExplorerContext, about: String, title: String, conversation: [ConversationTurn], tutorMode: Bool, learner: LearnerProfile? = nil) {
+        self.question = question; self.explorer = explorer; self.selectionMode = "page"
+        self.conversation = Array(conversation.suffix(12))
+        self.circledText = ""; self.pageText = about
+        self.pageTitle = title; self.pageUrl = "halo-3d://\(explorer.model)"
+        self.tutorMode = tutorMode; self.surface = "panel"; self.pointing = false
+        self.previousAnswer = conversation.last(where: { $0.role == "assistant" })?.text
         self.learner = learner.flatMap { $0.isEmpty && $0.struggles.isEmpty ? nil : $0 }
     }
 }
@@ -546,6 +568,7 @@ public struct DiveSection: Codable, Equatable, Sendable {
     public var cites: [Int]
 }
 public struct DiveAnswer: Codable, Equatable, Sendable {
+    public var scene3d: Scene3DSpec? = nil
     public var sections: [DiveSection]
     public var takeaway: String
     public var say: String
@@ -624,6 +647,7 @@ public struct LessonVisual: Codable, Equatable, Sendable { public var kind: Stri
 public struct LessonExample: Codable, Equatable, Sendable { public var title: String; public var given: String; public var steps: [String]; public var result: String; public var why: String }
 public struct LessonWeb: Codable, Equatable, Sendable { public var heading: String; public var text: String; public var sources: [DiveSource] }
 public struct LessonMaterial: Codable, Equatable, Sendable {
+    public var scene3d: Scene3DSpec? = nil
     public var n: Int; public var anchor: LessonAnchor; public var headline: String; public var status: String
     public var visual: LessonVisual?; public var example: LessonExample?; public var web: LessonWeb?; public var images: [DiveImage]
 }

@@ -75,6 +75,8 @@ struct TutorAvatar: View {
     var voiceLevel: () -> CGFloat? = { nil }
     /// The microphone's loudness while listening.
     var micLevel: () -> CGFloat = { 0 }
+    /// A single still pose at this moment (for the app icon), instead of the live animation.
+    var still: Double? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -82,7 +84,7 @@ struct TutorAvatar: View {
             let now = timeline.date
             let mood = cue.mood(at: now)
             Canvas { context, canvas in
-                draw(in: &context, size: canvas, t: reduceMotion ? 0 : now.timeIntervalSinceReferenceDate, mood: mood)
+                draw(in: &context, size: canvas, t: still ?? (reduceMotion ? 0 : now.timeIntervalSinceReferenceDate), mood: still == nil ? mood : cue.base)
             }
             .accessibilityLabel(mood.label)
         }

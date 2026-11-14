@@ -104,7 +104,21 @@ struct HaloMargin: View {
     // MARK: the writing
     @ViewBuilder private var paper: some View {
         if session.messages.isEmpty { invitation }
-        else { NotePaper(store: store, session: session).padding(.horizontal, 6) }
+        else {
+            VStack(spacing: 8) {
+                ForEach(scenes) { scene in Scene3DCard(store: store, scene: scene).padding(.horizontal, 12) }
+                NotePaper(store: store, session: session).padding(.horizontal, 6)
+            }
+        }
+    }
+    private var scenes: [Scene3DSpec] {
+        var result: [Scene3DSpec] = []
+        for item in session.messages.flatMap(\.ink) {
+            guard let scene = item.scene3D else { continue }
+            if let index = result.firstIndex(where: { $0.model == scene.model }) { result[index] = scene }
+            else { result.append(scene) }
+        }
+        return result
     }
     /// Before the first question: what Halo is hearing, or a few ways to start.
     private var invitation: some View {
