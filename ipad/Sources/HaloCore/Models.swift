@@ -143,6 +143,8 @@ public struct InkItem: Codable, Equatable, Sendable {
     public var style: String?
     /// "point": the 1-based page the quote is on, when it is not the page the note belongs to.
     public var page: Int?
+    /// A typeset formula or code block (an "image" made from "math"/"code"): its LaTeX or source, as text.
+    public var alt: String?
     public init(type: String, value: String? = nil) { self.type = type; self.value = value }
 }
 public struct AnswerStep: Codable, Equatable, Sendable {
@@ -156,6 +158,19 @@ public struct AnswerStep: Codable, Equatable, Sendable {
         self.index = index; self.say = say; self.ink = ink; self.audio = audio
     }
 }
+public extension Array where Element == InkItem {
+    /// What Halo wrote in these steps, as text a model can read back: handwritten lines, formulas and code.
+    var written: [String] {
+        compactMap { item in
+            switch item.type {
+            case "text": return item.value.flatMap { $0.isEmpty ? nil : $0 }
+            case "image": return item.alt      // "$…$" for a formula, a fenced block for code (set by the server)
+            default: return nil
+            }
+        }
+    }
+}
+
 public struct ConversationTurn: Codable, Equatable, Sendable {
     public var role: String
     public var text: String
@@ -176,6 +191,8 @@ public struct StudySession: Codable, Equatable, Identifiable, Sendable {
     public var region: PageRegion?
     public var lasso: [LassoPoint]?
     public var followUpLassos: [[LassoPoint]] = []
+    /// The latest circle hasn't been asked about yet (it moved here from a new circle while the note was open).
+    public var circlePending: Bool?
     public var mode = "answer"
     public var title: String
     public var draft = ""

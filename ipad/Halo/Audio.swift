@@ -27,6 +27,9 @@ final class AnswerPlayer: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDe
     private var watchdog: Task<Void, Never>?
     private var completion: CheckedContinuation<Void, Error>?
     private var token = UUID()
+    /// Halo's own (server) voice has played. After that, a step that arrives without a clip is shown, not read
+    /// in Apple's voice: a different voice halfway through an answer sounds like a different tutor.
+    private var heardServerVoice = false
     /// Releases the audio session once nothing has played for a moment (see `finish`).
     private var release: Task<Void, Never>?
     /// Told when playback starts (true) and ends (false), so the wake-word listener can step aside.
@@ -67,11 +70,23 @@ final class AnswerPlayer: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDe
                         audio = player; player.delegate = self; player.isMeteringEnabled = true
                         player.prepareToPlay()
                         if player.play() {
+                            heardServerVoice = true
                             let duration = player.duration.isFinite ? player.duration : 60
                             armWatchdog(seconds: min(180, max(8, duration + 5)), token: id)
                             return
                         }
                         audio = nil
+                    }
+                    if heardServerVoice {
+                        // No clip for this step (the voice service had a hiccup): stay quiet for as long as it would
+                        // take to say, so captions and ink keep their pace.
+                        watchdog?.cancel()
+                        watchdog = Task { [weak self] in
+                            do { try await Task.sleep(for: .seconds(Self.estimate(step.say))) } catch { return }
+                            guard let self, self.token == id else { return }
+                            self.finish()
+                        }
+                        return
                     }
                     guard !systemVoiceUnavailable else { finish(PlaybackFailure.unavailable); return }
                     if cachedVoice == nil { cachedVoice = AVSpeechSynthesisVoice(language: "en-US") }

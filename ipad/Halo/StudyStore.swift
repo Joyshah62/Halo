@@ -245,6 +245,9 @@ final class StudyStore: ObservableObject {
     func open(_ item: LibraryDocument) async {
         guard let repository else { return }
         let token = UUID(); openGeneration = token
+        // Offline sample answers belong to the sample document. They used to stay on after it, so a question about
+        // your own slides got the canned chain-rule answer. (Launch scripts set the mode themselves.)
+        if !scripted { demoMode = item.name == "A little calculus" }
         lesson.reset(); showLesson = false
         cancelAnswer(); speech.stop(); readTask?.cancel(); stopWatching(); await flush()
         if !notebookIsLoose { enhanceTask?.cancel(); enhancingNote = nil; drawingPictures = []; noteID = nil; showNotebook = false }
@@ -262,7 +265,8 @@ final class StudyStore: ObservableObject {
             try await repository.markOpened(item.id)
             guard openGeneration == token else { return }
             await loadLibrary()
-            if map(for: notes.pageIndex) == nil { if !notes.welcomed || !isBook { readDocument() } } else if !notes.welcomed { welcome = map(for: notes.pageIndex) }
+            // Opening a document just opens it. Halo's read of it (the spoken brief, key ideas and tricky pages) is
+            // there when asked for: "Halo's read of this" in the menu, or "what's this about?" to Halo.
         } catch { if openGeneration == token { self.error = error.localizedDescription } }
         if openGeneration == token { loading = false }
     }
@@ -804,6 +808,19 @@ final class StudyStore: ObservableObject {
     /// The student circled something with the Pencil. Either it's a new thread, or they circled
     /// part of an earlier answer and want to go deeper on it.
     func circled(_ lasso: [LassoPoint], region: PageRegion, on page: Int) {
+        // A conversation is open: the new circle is the next thing to ask about in it, so Halo keeps everything said
+        // so far ("and this one?"). Halo's own mistake notes are left alone; a new circle there starts a new note.
+        if let open = activeSession, pill != .hidden, !open.messages.isEmpty, open.origin != "check" {
+            cancelAnswer(); speech.stop(); dismissWelcome()
+            changePage(page)
+            updateSession {
+                if let old = $0.lasso { $0.followUpLassos.append(old) }
+                $0.pageIndex = page; $0.region = region; $0.lasso = lasso; $0.circlePending = true
+            }
+            error = nil; ink?.refresh(); ink?.revealCircle()
+            if scripted { pill = .typing } else { startListening() }
+            return
+        }
         cancelAnswer(); speech.stop(); dismissWelcome(); discardEmptyNotes()
         changePage(page)
         let session = StudySession(number: (notes.sessions.map(\.number).max() ?? 0) + 1, pageIndex: page, region: region, lasso: lasso)
@@ -923,13 +940,17 @@ final class StudyStore: ObservableObject {
         withAnimation(.easeOut(duration: 0.2)) { pill = .thinking(question) }
         updateSession {
             if $0.conversation.isEmpty { $0.title = String(question.prefix(70)) }
+            $0.circlePending = nil
             $0.messages.append(StudyMessage(role: "user", text: question, isDemo: useDemo)); $0.draft = ""
         }
         answerTask = Task { [weak self] in
             guard let self else { return }
-            var answer: [String] = [], parentID: Int?, didFinish = false
+            var answer: [String] = [], written: [String] = [], about = "", parentID: Int?, didFinish = false
             do {
                 let capture = try PDFCapture.make(page: page, region: session.region, lasso: session.lasso, drawing: notes.drawings[session.pageIndex])
+                // What this question was about, kept with it in the history: a later "this one" or "the earlier one" can be told apart.
+                let circled = capture.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                about = session.region == nil ? "page \(session.pageIndex + 1)" : circled.isEmpty ? "a circled part of page \(session.pageIndex + 1)" : "page \(session.pageIndex + 1), where I circled: “\(circled.prefix(300))”"
                 let payload = AskRequest(question: question, session: session, image: capture.crop, contextImage: capture.page,
                                          selectedText: capture.selectedText, pageText: page.string ?? "", title: document.name, documentID: document.id,
                                          tutorMode: hintsOnly, learner: await learnerSnapshot())
@@ -942,7 +963,7 @@ final class StudyStore: ObservableObject {
                     case .meta(let mode, let topic):
                         updateSession { $0.topic = topic; if $0.messages.filter({ $0.role == "assistant" }).isEmpty { $0.mode = mode } }
                     case .step(let step):
-                        answer.append(step.say)
+                        answer.append(step.say); written += step.ink.written
                         updateSession { $0.messages.append(StudyMessage(role: "assistant", text: step.say, ink: step.ink, isDemo: useDemo)) }
                         withAnimation(.easeOut(duration: 0.2)) { pill = .speaking(step.say) }
                         guard let current = activeSession else { return }
@@ -966,7 +987,11 @@ final class StudyStore: ObservableObject {
                 guard didFinish else { throw HaloError.incompleteStream }
                 guard generation == token else { return }
                 updateSession {
-                    $0.conversation += [ConversationTurn(role: "user", text: question), ConversationTurn(role: "assistant", text: answer.joined(separator: " "))]
+                    // Each turn as a chat message: the question with what it was about, and Halo's answer with what it
+                    // wrote (formulas and code included), so a follow-up can refer to any of it.
+                    let said = answer.joined(separator: " ")
+                    $0.conversation += [ConversationTurn(role: "user", text: about.isEmpty ? question : "\(question)\n(About \(about).)"),
+                                        ConversationTurn(role: "assistant", text: written.isEmpty ? said : "\(said)\n\nWritten in the note:\n\(written.joined(separator: "\n"))")]
                     $0.conversation = Array($0.conversation.suffix(20)); $0.parentID = parentID
                 }
                 withAnimation(.easeOut(duration: 0.25)) { pill = .ready }
@@ -1591,6 +1616,20 @@ final class StudyStore: ObservableObject {
             try? await Task.sleep(for: .milliseconds(400))
             if activeSession == nil { askAboutPage(pageIndex) }
             setDraft(question); ask()
+            // `--then-circle x,y,w,h [--then-page N] --then-ask "…"`: circles again once the answer is done, in the same note.
+            if let spec = value("--then-circle") {
+                while busy { try? await Task.sleep(for: .milliseconds(300)) }
+                try? await Task.sleep(for: .milliseconds(800))
+                let n = spec.split(separator: ",").compactMap { Double($0) }
+                if n.count == 4, let region = PageRegion(x: n[0], y: n[1], width: n[2], height: n[3]) {
+                    let lasso = (0...40).map { i -> LassoPoint in
+                        let a = Double(i) / 40 * 2 * .pi
+                        return LassoPoint(x: region.x + region.width / 2 + cos(a) * region.width / 2, y: region.y + region.height / 2 + sin(a) * region.height / 2)
+                    }
+                    circled(lasso, region: region, on: value("--then-page").flatMap(Int.init).map { $0 - 1 } ?? pageIndex)
+                    if let next = value("--then-ask") { try? await Task.sleep(for: .milliseconds(1200)); setDraft(next); ask() }
+                }
+            }
             if args.contains("--close") || value("--panel") != nil || value("--search") != nil {
                 while busy { try? await Task.sleep(for: .milliseconds(300)) }
                 try? await Task.sleep(for: .milliseconds(600))
