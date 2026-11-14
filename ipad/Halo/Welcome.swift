@@ -9,54 +9,60 @@ struct WelcomeCard: View {
     @State private var revealed = 0
     private var tricky: Int { map.pages.filter { $0.difficulty >= 3 }.count }
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                HaloRing(size: 44, symbol: "checkmark").padding(.top, 2)
-                VStack(alignment: .leading, spacing: 4) {
-                    Eyebrow("Halo read it first", color: HaloStyle.coral)
-                    Text(map.title).font(.system(size: 27, design: .serif)).foregroundStyle(HaloStyle.text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                CloseButton { store.dismissWelcome() }
-            }
-            FlowRow(spacing: 8) {
-                ScribbleChip(text: map.subject.lowercased(), icon: "books.vertical")
-                ScribbleChip(text: "\(map.pages.count) pages", icon: "doc.text")
-                if tricky > 0 { ScribbleChip(text: "\(tricky) tricky", icon: "exclamationmark.triangle") }
-            }
-            HStack(alignment: .top, spacing: 9) {
-                Image(systemName: "waveform").font(.system(size: 14, weight: .semibold)).foregroundStyle(HaloStyle.coral)
-                    .symbolEffect(.variableColor.iterative, isActive: revealed < map.keyIdeas.count).padding(.top, 3)
-                Text(map.say).font(.system(size: 16.5)).foregroundStyle(HaloStyle.text).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
-            }
-            Sticky(label: "The three ideas to keep", tilt: -0.6) {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(map.keyIdeas.enumerated()), id: \.offset) { index, idea in
-                        HStack(alignment: .firstTextBaseline, spacing: 9) {
-                            Text("\(index + 1)").font(HaloKit.hand(30)).foregroundStyle(HaloStyle.coral).frame(width: 16, alignment: .leading)
-                            Text(idea).font(HaloKit.hand(27)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .top, spacing: 14) {
+                        HaloRing(size: 44, symbol: "checkmark").padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Eyebrow("Halo read it first", color: HaloStyle.coral)
+                            Text(map.title).font(.system(size: 27, design: .serif)).foregroundStyle(HaloStyle.text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                         }
-                        .opacity(index < revealed ? 1 : 0).offset(x: index < revealed ? 0 : -8)
-                        .animation(.easeOut(duration: 0.45).delay(0.1), value: revealed)
+                        Spacer(minLength: 8)
+                        CloseButton { store.dismissWelcome() }
                     }
+                    FlowRow(spacing: 8) {
+                        ScribbleChip(text: map.subject.lowercased(), icon: "books.vertical")
+                        ScribbleChip(text: "\(map.pages.count) pages", icon: "doc.text")
+                        if tricky > 0 { ScribbleChip(text: "\(tricky) tricky", icon: "exclamationmark.triangle") }
+                    }
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: "waveform").font(.system(size: 14, weight: .semibold)).foregroundStyle(HaloStyle.coral)
+                            .symbolEffect(.variableColor.iterative, isActive: revealed < map.keyIdeas.count).padding(.top, 3)
+                        Text(map.say).font(.system(size: 16.5)).foregroundStyle(HaloStyle.text).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+                    }
+                    Sticky(label: "The three ideas to keep", tilt: -0.6) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(map.keyIdeas.enumerated()), id: \.offset) { index, idea in
+                                HStack(alignment: .firstTextBaseline, spacing: 9) {
+                                    Text("\(index + 1)").font(HaloKit.hand(30)).foregroundStyle(HaloStyle.coral).frame(width: 16, alignment: .leading)
+                                    Text(idea).font(HaloKit.hand(27)).foregroundStyle(HaloStyle.text).fixedSize(horizontal: false, vertical: true)
+                                }
+                                .opacity(index < revealed ? 1 : 0).offset(x: index < revealed ? 0 : -8)
+                                .animation(.easeOut(duration: 0.45).delay(0.1), value: revealed)
+                            }
+                        }
+                    }
+                    pageStrip
+                    HStack(spacing: 10) {
+                        Button { store.startFromWelcome(page: map.startHere - 1) } label: {
+                            Label("Start at page \(map.startHere)", systemImage: "arrow.turn.down.right").frame(maxWidth: .infinity)
+                        }.buttonStyle(PillButtonStyle())
+                        Button { store.startFromWelcome(page: max(0, (map.pages.first?.page ?? 1) - 1)) } label: { Text("From the top").frame(maxWidth: .infinity) }
+                            .buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: false))
+                    }
+                    Text("circle anything with your Pencil and ask").font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink.opacity(0.8)).frame(maxWidth: .infinity)
                 }
+                .padding(26)
             }
-            pageStrip
-            HStack(spacing: 10) {
-                Button { store.startFromWelcome(page: map.startHere - 1) } label: {
-                    Label("Start at page \(map.startHere)", systemImage: "arrow.turn.down.right").frame(maxWidth: .infinity)
-                }.buttonStyle(PillButtonStyle())
-                Button { store.startFromWelcome(page: max(0, (map.pages.first?.page ?? 1) - 1)) } label: { Text("From the top").frame(maxWidth: .infinity) }
-                    .buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: false))
-            }
-            Text("circle anything with your Pencil and ask").font(HaloKit.hand(21)).foregroundStyle(HaloStyle.ink.opacity(0.8)).frame(maxWidth: .infinity)
+            .scrollIndicators(.visible)
+            .frame(width: min(500, geometry.size.width - 40), height: min(760, geometry.size.height - 48))
+            .background(DeskPaper().clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous)))
+            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(HaloStyle.coral.opacity(0.3), lineWidth: 1.5))
+            .shadow(color: .black.opacity(0.25), radius: 34, y: 16)
+            .transition(.scale(scale: 0.94).combined(with: .opacity))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(26)
-        .frame(width: 500)
-        .background(DeskPaper().clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous)))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(HaloStyle.coral.opacity(0.3), lineWidth: 1.5))
-        .shadow(color: .black.opacity(0.25), radius: 34, y: 16)
-        .transition(.scale(scale: 0.94).combined(with: .opacity))
         .task {
             // Reveal the handwriting line by line, roughly in time with the spoken brief.
             for i in 1...max(1, map.keyIdeas.count) {
