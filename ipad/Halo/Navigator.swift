@@ -162,6 +162,7 @@ struct NavigatorView: View {
     @ObservedObject var store: StudyStore
     @StateObject private var search = BookSearch()
     @State private var expanded: Set<Int> = []
+    @FocusState private var searchFocused: Bool
     private var query: String { store.navigatorQuery.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var notes: [StudySession] {
         store.notes.sessions.filter { !$0.messages.isEmpty }.sorted { ($0.pageIndex, $0.number) < ($1.pageIndex, $1.number) }
@@ -169,15 +170,31 @@ struct NavigatorView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if query.count >= 2 { results }
-                else if store.navigatorTab == .chapters { chapterList }
-                else { noteList }
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search the book and your notes", text: $store.navigatorQuery)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
+                        .focused($searchFocused).accessibilityLabel("Search the book and your notes")
+                    if !store.navigatorQuery.isEmpty {
+                        Button { store.navigatorQuery = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                            .buttonStyle(.plain).accessibilityLabel("Clear search")
+                    }
+                }
+                .padding(.horizontal, 14).frame(height: 44)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(Color.black.opacity(0.1)))
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                List {
+                    if query.count >= 2 { results }
+                    else if store.navigatorTab == .chapters { chapterList }
+                    else { noteList }
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden).background(DeskPaper().ignoresSafeArea())
-            .searchable(text: $store.navigatorQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search the book and your notes")
-            .autocorrectionDisabled()
+            .background(DeskPaper())
+            .padding(.bottom, 16)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {

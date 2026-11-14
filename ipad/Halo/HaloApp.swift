@@ -162,7 +162,7 @@ struct StudioView: View {
                     Text("\(store.pageIndex + 1) / \(store.pdf?.pageCount ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     Button(action: openSettings) { Image(systemName: "gearshape") }.accessibilityLabel("Settings")
                 }
-                .popover(isPresented: $store.showNavigator) { NavigatorView(store: store).frame(minWidth: 420, idealWidth: 420, minHeight: 620, idealHeight: 660) }
+                .popover(isPresented: $store.showNavigator) { NavigatorView(store: store).frame(minWidth: 420, idealWidth: 420, minHeight: 300, idealHeight: 660) }
             }
         }
     }
