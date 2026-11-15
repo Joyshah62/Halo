@@ -23,7 +23,8 @@
 //        weaknesses (saved to their memory; insights.js has the rules).
 import { StateGraph, Annotation, START, END, interrupt, Command } from "@langchain/langgraph";
 import { randomUUID } from "node:crypto";
-import { lessonSaver, cachedLessonReply, saveLessonReply } from "./lesson-store.js";
+import { lessonSaver, cachedLessonReply, saveLessonReply, replaySession, saveReplaySession } from "./lesson-store.js";
+import * as replay from "./replay.js";
 import { streamText, generateJSON } from "./llm.js";
 import { speak } from "./tts.js";
 import { describeLearner } from "./prompt.js";
@@ -565,8 +566,80 @@ export async function startLesson(input, send) {
   pages.sort((a, b) => a.page - b.page);
   // Weak spots from earlier quizzes and lessons travel with the learner, so every step can give them more care.
   input = { ...input, pages, learner: await withWeakSpots(input.learner, input.learnerId) };
+  if (replay.inScope(input.title, input.chapter, ...pages.map((p) => p.text))) return startReplayed(input, send);
   const id = randomUUID();
   return run(id, { ...input, id }, send);
+}
+
+// ---------- replayed lessons (replay.js) ----------
+// The client gets its own lesson ID; behind it, a walk down the recorded tree of this chapter's lessons.
+// A reply someone gave before replays; a new one continues live from the checkpoint the lesson was paused at,
+// and what Halo says then is recorded as a new branch.
+const relabel = (events, from, to) => events.map(([event, data]) => [event, data && data.id === from ? { ...data, id: to } : data]);
+async function pausedAt(thread) {
+  const snapshot = await lessonGraph.getState(settings(thread));
+  return { checkpoint: snapshot.config?.configurable?.checkpoint_id, waiting: (snapshot.next || []).length > 0 };
+}
+async function startReplayed(input, send) {
+  const file = replay.lessonFile(input.pages);
+  const session = randomUUID();
+  let tree = replay.loadLesson(file);
+  if (tree?.root) {
+    for (const [event, data] of relabel(tree.root.events, tree.root.thread, session)) send(event, data);
+    console.log(`[lesson] ${session.slice(0, 8)} replayed the start of "${tree.title}"`);
+  } else {
+    const thread = randomUUID(), events = [];
+    await run(thread, { ...input, id: thread }, (event, data) => { events.push([event, data]); send(event, data.id === thread ? { ...data, id: session } : data); });
+    tree = { kind: "lesson", title: input.chapter || input.title, at: new Date().toISOString(), root: { events, thread, ...(await pausedAt(thread)), children: [] } };
+    replay.saveLesson(file, tree);
+  }
+  saveReplaySession(session, { file, path: [] });
+  return { id: session, waiting: tree.root.waiting };
+}
+// A new branch starts from a copy of the paused checkpoint in a thread of its own. Resuming the recorded thread
+// itself would reuse the answer already stored there (LangGraph keeps resume values with the checkpoint).
+async function branchFrom(node) {
+  const tuple = await lessonSaver.getTuple({ configurable: { thread_id: node.thread, checkpoint_ns: "", checkpoint_id: node.checkpoint } });
+  if (!tuple) throw new Error("That lesson has ended or the server was restarted. Start it again.");
+  const thread = randomUUID();
+  const saved = await lessonSaver.put({ configurable: { thread_id: thread, checkpoint_ns: "" } }, tuple.checkpoint, tuple.metadata);
+  const byTask = new Map();
+  for (const [task, channel, value] of tuple.pendingWrites || []) {
+    if (channel === "__resume__") continue;
+    if (!byTask.has(task)) byTask.set(task, []);
+    byTask.get(task).push([channel, value]);
+  }
+  for (const [task, writes] of byTask) await lessonSaver.putWrites(saved, writes, task);
+  return thread;
+}
+async function continueReplayed(id, session, reply, send) {
+  const tree = replay.loadLesson(session.file);
+  if (!tree?.root) throw new Error("That lesson has ended or the server was restarted. Start it again.");
+  let node = tree.root;
+  for (const index of session.path) node = node.children[index];
+  const said = { action: reply.action || "answer", answer: clip(reply.answer, 1500), concept: Number(reply.concept) || 0 };
+  const known = replay.matchReply(node, said);
+  if (known) {
+    for (const [event, data] of relabel(known.events, known.thread, id)) send(event, data);
+    saveReplaySession(id, { ...session, path: [...session.path, node.children.indexOf(known)] });
+    return { id, waiting: known.waiting };
+  }
+  if (!node.waiting) throw new Error("That lesson has ended. Start it again.");
+  const thread = await branchFrom(node);
+  const snapshot = await lessonGraph.getState(settings(thread));
+  if (!snapshot?.values?.plan || !(snapshot.next || []).length) throw new Error("That lesson has ended or the server was restarted. Start it again.");
+  if (said.action === "answer" && !said.answer) throw new Error("Say or type an answer, ask a question, or leave this concept for later.");
+  if (said.action === "jump" && !snapshot.values.plan.concepts.some((c) => c.n === said.concept)) throw new Error("Choose a concept from this lesson's roadmap.");
+  const events = [];
+  for await (const chunk of await lessonGraph.stream(new Command({ resume: reply }), settings(thread))) {
+    if (chunk && typeof chunk.event === "string") { events.push([chunk.event, chunk.data]); send(chunk.event, chunk.data); }
+  }
+  const branch = { reply: said, events, thread, ...(await pausedAt(thread)), children: [] };
+  node.children.push(branch);
+  replay.saveLesson(session.file, tree);
+  saveReplaySession(id, { ...session, path: [...session.path, node.children.length - 1] });
+  console.log(`[lesson] ${id.slice(0, 8)} recorded a new branch: ${said.action} "${said.answer.slice(0, 50)}"`);
+  return { id, waiting: branch.waiting };
 }
 
 /** Hands the student's reply to the paused lesson and streams what Halo does next. */
@@ -588,7 +661,13 @@ export async function continueLesson(id, reply, send) {
     return continueLesson(id, reply, send);
   }
   const events = [];
+  const replayed = replaySession(id);
   const promise = (async () => {
+    if (replayed) {
+      const result = await continueReplayed(id, replayed, reply, (event, data) => { events.push([event, data]); send(event, data); });
+      if (reply.requestID) { const completed = { events, result }; saveLessonReply(key, completed); replies.set(key, completed); }
+      return result;
+    }
     const snapshot = await lessonGraph.getState(settings(id));
     if (!snapshot?.values?.plan || !(snapshot.next || []).length) throw new Error("That lesson has ended or the server was restarted. Start it again.");
     const action = reply.action || "answer";

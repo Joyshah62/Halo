@@ -33,6 +33,9 @@ services:
         value: /var/data/memory
       - key: HALO_LOG_DIR
         value: /var/data/logs
+      # Demo replay cache (replay.js): recorded answers and lessons survive deploys and restarts.
+      - key: HALO_REPLAY_DIR
+        value: /var/data/replay
       - key: HALO_MOCK
         value: "0"
       # Brain

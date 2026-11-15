@@ -15,6 +15,7 @@ import * as web from "./web.js";
 import { cleanStep, despeak, prepareStep } from "./steps.js";
 import { catalog as scenes, cleanExplorer } from "../shared/scene3d/schema.js";
 import { startLesson, continueLesson } from "./lesson.js";
+import * as replay from "./replay.js";
 import { installNotesQuiz } from "./notes-quiz.js";
 import { installInsights } from "./insights.js";
 import { storeFile, tryStoreFile, listFiles, storageEnabled, StorageError, MAX_FILE_BYTES } from "./storage.js";
@@ -97,7 +98,13 @@ app.post("/api/ask", async (req, res) => {
   const stream = eventStream(res, { onHeartbeat: () => log("ask.waiting", {
     request: res.locals.requestID, question: res.locals.questionID, stage: res.locals.stage, ms: Date.now() - started,
   }) });
-  const send = (event, data) => stream.send(event, data);
+  // Pages of the demo document are recorded once and replayed after that (replay.js).
+  const replayable = replay.inScope(b.pageTitle, b.pageText);
+  const recorded = [];
+  const send = (event, data) => {
+    if (replayable && (event === "meta" || event === "step")) recorded.push([event, data]);
+    return stream.send(event, data);
+  };
 
   const qid = db.logQuestion({
     url: b.pageUrl, title: b.pageTitle, question: b.question,
@@ -114,6 +121,17 @@ app.post("/api/ask", async (req, res) => {
   }
 
   try {
+  const recording = replayable && replay.findAnswer(b);
+  if (recording) {
+    trace("ask.replayed", { recordedAt: recording.at });
+    for (const [event, data] of recording.events) if (!stream.closed) stream.send(event, data);
+    const said = recording.events.filter(([event]) => event === "step").map(([, data]) => data.say);
+    const topic = recording.events.find(([event]) => event === "meta")?.[1]?.topic;
+    db.finishQuestion(qid, { topic, circledText: (b.circledText || "").slice(0, 500), answerText: said.join(" ") });
+    send("done", { id: qid, steps: said.length, ms: Date.now() - started, replayed: true });
+    console.log(`[ask] #${qid} replayed ${said.length} steps — ${b.question}`);
+    return;
+  }
   const images = [];
   if (b.contextImage) images.push({ mime: "image/jpeg", data: b.contextImage, label: "Screenshot of the whole visible page (for context):" });
   if (b.image) images.push({ mime: b.imageMime || "image/png", data: b.image, label: "Close-up of the rectangular section the student selected:" });
@@ -214,6 +232,7 @@ app.post("/api/ask", async (req, res) => {
     await new Promise((r) => setTimeout(r, 400));
     await flushing;
     db.finishQuestion(qid, { topic: meta?.topic, circledText: (b.circledText || "").slice(0, 500), answerText: steps.map((s) => s.say).join(" ") });
+    if (replayable && !stream.closed) replay.saveAnswer(b, recorded);
     send("done", { id: qid, steps: steps.length, ms: Date.now() - t0 });
     return res.end();
   }
@@ -236,6 +255,8 @@ app.post("/api/ask", async (req, res) => {
     if (preparationError) throw preparationError;
     if (stream.closed) return;
     if (!meta) { meta = { mode: b.tutorMode ? "hint" : "answer", topic: "" }; send("meta", meta); }
+    // Only a complete, real answer is kept: not the "couldn't read that" fallback, not one the student walked away from.
+    if (replayable && steps.length && emitted === steps.length) replay.saveAnswer(b, recorded);
     if (steps.length === 0) {
       // Fallback: plain text next to the circle
       const text = fullText.replace(/```[a-z]*|```/g, "").trim();

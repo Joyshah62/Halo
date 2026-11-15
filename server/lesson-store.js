@@ -20,3 +20,16 @@ export function cachedLessonReply(key) {
 export function saveLessonReply(key, response) {
   db.transaction(() => { write.run(key, JSON.stringify(response)); trim.run(); })();
 }
+
+// Replayed lessons (replay.js): which recording a client's lesson ID walks, and how far along it is.
+db.exec("CREATE TABLE IF NOT EXISTS halo_replay_sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL)");
+const readSession = db.prepare("SELECT data FROM halo_replay_sessions WHERE id = ?");
+const writeSession = db.prepare("INSERT OR REPLACE INTO halo_replay_sessions (id, data) VALUES (?, ?)");
+const trimSessions = db.prepare("DELETE FROM halo_replay_sessions WHERE id NOT IN (SELECT id FROM halo_replay_sessions ORDER BY rowid DESC LIMIT 200)");
+export function replaySession(id) {
+  const row = readSession.get(id);
+  return row ? JSON.parse(row.data) : undefined;
+}
+export function saveReplaySession(id, session) {
+  db.transaction(() => { writeSession.run(id, JSON.stringify(session)); trimSessions.run(); })();
+}
