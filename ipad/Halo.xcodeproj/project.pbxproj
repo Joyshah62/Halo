@@ -11,6 +11,7 @@
 		D3D000000000000000000003 /* Scene3D.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D000000000000000000004 /* Scene3D.swift */; };
 		D3D000000000000000000001 /* Scene3DView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D000000000000000000002 /* Scene3DView.swift */; };
 		1C0A000000000000000000A1 /* AppIconArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0A000000000000000000A2 /* AppIconArt.swift */; };
+		F1A5C0000000000000000001 /* Flashcards.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A5C0000000000000000002 /* Flashcards.swift */; };
 		1C0A000000000000000000A3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1C0A000000000000000000A4 /* Assets.xcassets */; };
         ABCDEF123456789000000001 /* Lesson.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEF123456789000000002 /* Lesson.swift */; };
         ABCDEF123456789000000003 /* TutorAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEF123456789000000004 /* TutorAvatar.swift */; };
@@ -46,6 +47,7 @@
 		D3D000000000000000000004 /* Scene3D.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scene3D.swift; sourceTree = "<group>"; };
 		D3D000000000000000000002 /* Scene3DView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scene3DView.swift; sourceTree = "<group>"; };
 		1C0A000000000000000000A2 /* AppIconArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconArt.swift; sourceTree = "<group>"; };
+		F1A5C0000000000000000002 /* Flashcards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Flashcards.swift; sourceTree = "<group>"; };
 		1C0A000000000000000000A4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
         ABCDEF123456789000000002 /* Lesson.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lesson.swift; sourceTree = "<group>"; };
         ABCDEF123456789000000004 /* TutorAvatar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorAvatar.swift; sourceTree = "<group>"; };
@@ -95,6 +97,7 @@
 			children = (
 				D3D000000000000000000002 /* Scene3DView.swift */,
 				1C0A000000000000000000A2 /* AppIconArt.swift */,
+				F1A5C0000000000000000002 /* Flashcards.swift */,
 				1C0A000000000000000000A4 /* Assets.xcassets */,
 				ABCDEF123456789000000002 /* Lesson.swift */,
 				ABCDEF123456789000000004 /* TutorAvatar.swift */,
@@ -239,6 +242,7 @@
 				D3D000000000000000000003 /* Scene3D.swift in Sources */,
 				D3D000000000000000000001 /* Scene3DView.swift in Sources */,
 				1C0A000000000000000000A1 /* AppIconArt.swift in Sources */,
+				F1A5C0000000000000000001 /* Flashcards.swift in Sources */,
 				ABCDEF123456789000000001 /* Lesson.swift in Sources */,
 				ABCDEF123456789000000003 /* TutorAvatar.swift in Sources */,
                 D73A1E696439F6299259A213 /* Audio.swift in Sources */,

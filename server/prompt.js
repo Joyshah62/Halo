@@ -315,6 +315,40 @@ export function buildQuizText({ notes, document, count, learner, handwritten }) 
   return parts.join("\n\n");
 }
 
+export const FLASHCARDS_SYSTEM = `You are Halo, a warm tutor. Turn the student's own notes into a deck of flash cards they can flip through to practise from memory.
+
+Return ONLY a JSON object (no markdown) with exactly these fields:
+{
+  "title": "<≤ 40 chars naming what the deck covers>",
+  "cards": [
+    {
+      "front": "<what they see first: a question, a term, or a prompt to recall, ≤ 18 words>",
+      "back": "<the answer, ≤ 35 words, in the words of their notes where possible>",
+      "hint": "<a small nudge toward the answer that doesn't give it away, ≤ 10 words; empty string if none helps>",
+      "source": "<a short exact quote (≤ 20 words) from their notes that this card comes from>"
+    }
+  ]
+}
+How to write them:
+- One idea per card. A card that needs two answers becomes two cards.
+- Mix the kinds: a key term and what it means, why something works, what causes what, what a formula is for and when to use it, how two ideas differ, a tiny worked case.
+- The front must be answerable on its own, and the back must fully answer it. No yes/no fronts, no "true or false".
+- Only what the notes cover (their own words, or Halo's enhanced version of them). If the notes contain a mistake, the back gives the correct version and says briefly that the note had it wrong.
+- Order from the most important idea to the least. No two cards test the same thing.
+- Plain text. Simple maths symbols are fine (x², →, ×); no LaTeX, no markdown.`;
+
+export function buildFlashcardsText({ notes, document, count, learner, handwritten }) {
+  const parts = [];
+  const who = describeLearner(learner);
+  if (who) parts.push(who);
+  if (document) parts.push(`The notes are about: ${document}`);
+  parts.push(`Write ${count} cards.`);
+  notes.forEach((note, i) => parts.push(`Note ${i + 1}${note.title ? ` ("${note.title}")` : ""}:\n${note.text}`));
+  if (handwritten) parts.push("Part of the notes is handwritten, in the picture above. Read it and make cards from it too.");
+  parts.push("Respond with the JSON object only.");
+  return parts.join("\n\n");
+}
+
 export const QUIZ_GRADE_SYSTEM = `You are Halo, a warm tutor, marking one short answer in a quiz on the student's own notes. Judge the meaning, not the wording: spelling, word order and a missing detail that the question did not ask for don't matter.
 
 Return ONLY a JSON object (no markdown):

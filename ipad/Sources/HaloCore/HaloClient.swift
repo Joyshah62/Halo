@@ -162,6 +162,10 @@ public struct HaloClient: Sendable {
     public func quiz(_ payload: QuizRequest, server: String) async throws -> Quiz {
         try await post("api/notes/quiz", payload, server: server, timeout: 120)
     }
+    /// Flash cards from the student's notes (same request as a quiz).
+    public func flashcards(_ payload: QuizRequest, server: String) async throws -> FlashcardDeck {
+        try await post("api/notes/flashcards", payload, server: server, timeout: 120)
+    }
     /// Marks one short answer in a quiz.
     public func grade(_ payload: QuizGradeRequest, server: String) async throws -> QuizGrade {
         try await post("api/notes/grade", payload, server: server, timeout: 45)

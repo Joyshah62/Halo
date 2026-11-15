@@ -28,6 +28,16 @@ final class StudyStore: ObservableObject {
     /// "Quiz me on my notes", opened from Halo in the notebook.
     let quizCoach = QuizCoach()
     @Published var showQuiz = false
+    // Flash cards from the notes (Flashcards.swift).
+    @Published var showFlashcards = false
+    @Published var deck: FlashcardDeck?
+    @Published var deckLoading = false
+    @Published var deckError: String?
+    /// "this note", "all 4 notes": what the deck was made from.
+    @Published var deckScope = ""
+    /// The note the deck is saved with (nil for a deck made from all the notes).
+    @Published var deckNoteID: UUID?
+    private var deckTask: Task<Void, Never>?
     /// Halo in the notebook: its menu, and its spoken answer to a question about the notes.
     @Published var showNotesHalo = false
     @Published var notesReply: String?
@@ -918,6 +928,92 @@ final class StudyStore: ObservableObject {
         }
     }
     func closeQuiz() { quizCoach.close(); showQuiz = false }
+
+    // MARK: - Flash cards
+    /// Flash cards from this note (kept with it, and reopened as they were unless the note has changed or `fresh`)
+    /// or from all the notes here.
+    func startFlashcards(allNotes: Bool, fresh: Bool = false) {
+        let chosen = allNotes ? quizzableNotes : [openNote].compactMap { $0 }.filter { !$0.isEmpty }
+        guard !chosen.isEmpty else { noteError = "Write something in this note first, then Halo can make flash cards from it."; return }
+        dismissRefine(); player.stop(); notesTask?.cancel(); notesBusy = false
+        withAnimation(.spring(duration: 0.3)) { showNotesHalo = false; notesReply = nil }
+        let single = allNotes ? nil : chosen[0]
+        deckScope = allNotes ? (chosen.count == 1 ? "your note" : "all \(chosen.count) notes") : "this note"
+        deckNoteID = single?.id; deckError = nil
+        if !fresh, let single, let saved = single.flashcards, saved.madeFrom == single.contentStamp, !saved.cards.isEmpty {
+            deck = saved; deckLoading = false; showFlashcards = true; return
+        }
+        let image = single.flatMap { Self.inkImage($0.drawing) }
+        let notes = notesPayload(chosen)
+        guard !notes.isEmpty || image != nil else { noteError = "Write something in this note first, then Halo can make flash cards from it."; return }
+        let loose = notebookIsLoose, document = loose ? "" : displayTitle, server = serverURL, offline = demoMode && !loose
+        deck = nil; deckLoading = true; showFlashcards = true
+        deckTask?.cancel()
+        deckTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                var made: FlashcardDeck
+                if offline {
+                    try await Task.sleep(for: .seconds(1))
+                    made = FlashcardDeck(title: "The chain rule", cards: [
+                        Flashcard(front: "What does the chain rule multiply together?", back: "The outside's derivative and the inside's derivative: outside′ × inside′.", hint: "two derivatives", source: "outside′ × inside′"),
+                        Flashcard(front: "What should you ask first when using the chain rule?", back: "What's inside? Find the inner function.", source: "always ask: what's inside?"),
+                        Flashcard(front: "Power rule: what is the derivative of xⁿ?", back: "n·xⁿ⁻¹: bring the power down and reduce it by one.", hint: "bring it down", source: "power rule: xⁿ → n·xⁿ⁻¹"),
+                        Flashcard(front: "Where does the 2x in d/dx (x² + 1)³ come from?", back: "It's the derivative of the inside, x² + 1.", source: "inside: x² + 1 → 2x"),
+                    ])
+                } else {
+                    made = try await client.flashcards(QuizRequest(notes: notes, document: document, image: image, learner: await notesLearner()), server: server)
+                }
+                guard !Task.isCancelled else { return }
+                made.madeFrom = single?.contentStamp; made.createdAt = Date()
+                // Kept with the note, so the cards are there next time.
+                if let single { modify(loose, single.id) { list, index in if let index { list[index].flashcards = made } } }
+                withAnimation(.spring(duration: 0.4)) { deck = made; deckLoading = false }
+            } catch {
+                guard !Task.isCancelled else { return }
+                withAnimation { deckLoading = false; deckError = (error as? LocalizedError)?.errorDescription ?? "Halo couldn’t make flash cards just now. Check the server in Settings and try again." }
+            }
+        }
+    }
+    /// New cards from the same notes.
+    func remakeFlashcards() {
+        if let id = deckNoteID { selectNote(id); startFlashcards(allNotes: false, fresh: true) } else { startFlashcards(allNotes: true, fresh: true) }
+    }
+    func closeFlashcards() { deckTask?.cancel(); deckLoading = false; showFlashcards = false }
+    /// "Make flash cards" said or typed anywhere: from the notes of the open document, or the quick notes.
+    func flashcardsFromAnywhere(allNotes: Bool = true) {
+        if !showNotebook {
+            if document != nil { openNotebook() } else { openQuickNotes() }
+        }
+        guard !quizzableNotes.isEmpty else {
+            noteError = "Write a few notes first, then Halo can make flash cards from them."
+            react(.unsure, say: "Write a few notes first"); return
+        }
+        // The notebook slides up first; the deck goes on top of it.
+        Task { [weak self] in try? await Task.sleep(for: .milliseconds(650)); self?.startFlashcards(allNotes: allNotes) }
+    }
+
+    // MARK: - Home
+    /// Back to the start screen from anywhere: closes whatever is open on top, saves, and puts the document away.
+    func goHome() async {
+        player.stop(); speech.stop(); silenceTask?.cancel()
+        explorer = nil
+        if showFlashcards { closeFlashcards() }
+        if showQuiz { closeQuiz() }
+        if showRecap { closeRecap() }
+        if showLesson { lesson.hush(); showLesson = false }
+        if dive != nil { closeDive() }
+        if refine != nil { dismissRefine() }
+        showNavigator = false; showLauncher = false; showDock = false
+        if showNotebook { closeNotebook() }
+        guard document != nil else { return }
+        cancelAnswer(); readTask?.cancel(); stopWatching(); await flush()
+        openGeneration = UUID()
+        withAnimation(.easeInOut(duration: 0.3)) {
+            recap = nil; document = nil; pdf = nil; selectedSessionID = nil; notes = DocumentNotes()
+            pill = .hidden; anchorFrame = nil; chapters = []; reading = nil; welcome = nil; pointer = nil
+        }
+    }
     /// A question about the notes, answered aloud in a bubble by Halo.
     func askNotes(_ question: String) {
         let asked = question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -956,6 +1052,7 @@ final class StudyStore: ObservableObject {
         let said = rest.lowercased()
         if rest.isEmpty { react(.wink, seconds: 1.1); withAnimation(.spring(duration: 0.35, bounce: 0.2)) { showNotesHalo = true } }
         else if said.range(of: #"\b(quiz|test) me\b"#, options: .regularExpression) != nil { startQuiz(allNotes: said.contains("all")) }
+        else if said.range(of: #"\bflash ?cards?\b"#, options: .regularExpression) != nil { startFlashcards(allNotes: said.contains("all")) }
         else if said.range(of: #"\b(enhance|improve|tidy|clean up)\b"#, options: .regularExpression) != nil, let id = noteID { enhanceNote(id) }
         else { askNotes(rest) }
     }
@@ -967,6 +1064,11 @@ final class StudyStore: ObservableObject {
         try? await Task.sleep(for: .seconds(0.8))
         if args.contains("--notes-halo") { withAnimation { showNotesHalo = true } }
         if let asked = value("--notes-ask") { askNotes(asked) }
+        // `--flashcards [all] [--flip N]`: makes a deck, then flips through N cards, for screenshots.
+        if args.contains("--flashcards") {
+            startFlashcards(allNotes: value("--flashcards") == "all")
+            return
+        }
         guard args.contains("--quiz") else { return }
         startQuiz(allNotes: value("--quiz") == "all")
         let answers = (value("--quiz-answers") ?? "").split(separator: "|").map(String.init)
@@ -1332,6 +1434,10 @@ final class StudyStore: ObservableObject {
                   let found = regex.firstMatch(in: asked, range: NSRange(asked.startIndex..., in: asked)) else { return nil }
             return (0..<found.numberOfRanges).map { Range(found.range(at: $0), in: asked).map { String(asked[$0]) } ?? "" }
         }
+        // "Make flash cards", "flashcards from my notes": a deck from the notes here (or the quick notes).
+        if matches(#"\bflash ?cards?\b"#) != nil { flashcardsFromAnywhere(allNotes: matches(#"\bthis note\b"#) == nil); return }
+        // "Go home", "home", "start screen": back to the start screen.
+        if matches(#"^(go |take me )?(back )?(home|to the start( screen)?|to the home( screen| page)?)\W*$"#) != nil { Task { await goHome() }; return }
         // "Show me the brain", "explore a neuron in 3D": the model itself, to turn and touch.
         if let wanted = matches(#"^(?:(?:can you |please )?(?:show|open|explore|see|let me (?:see|explore|touch))(?: me)?|3d) (?:the |a |an |inside (?:the |a )?)?(?:human |3d |animal )?(brain|neuron|nerve cell|cell)(?: (?:model|in 3d|3d))*\W*$"#)?[1].lowercased() {
             let model = wanted == "brain" ? "brain" : wanted == "cell" ? "animal-cell" : "neuron"

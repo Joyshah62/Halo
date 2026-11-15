@@ -322,8 +322,11 @@ struct Explorer3D: View {
                         panel.padding(.horizontal, 14).padding(.bottom, 12)
                     }
                 }
-                CloseButton(label: "Close the 3D explorer") { model.close(); dismiss() }
-                    .padding(.top, wide ? 30 : 14).padding(.trailing, wide ? 34 : 18)
+                HStack(spacing: 10) {
+                    HomeButton { model.close(); dismiss(); Task { await store.goHome() } }
+                    CloseButton(label: "Close the 3D explorer") { model.close(); dismiss() }
+                }
+                .padding(.top, wide ? 30 : 14).padding(.trailing, wide ? 34 : 18)
             }
         }
         .onDisappear { model.close() }

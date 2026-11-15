@@ -5,13 +5,15 @@
 //                          → { title, questions: [{ kind, ask, options, answer, expected, explain, source, audio }] }
 //   POST /api/notes/grade  { ask, expected, source?, answer }  → { verdict: "right"|"almost"|"wrong", say, audio }
 //   POST /api/notes/ask    { question, notes: [{ title, text }], document?, learner? }  → { say, audio }
+//   POST /api/notes/flashcards { notes: [{ title, text }], image?, document?, learner? }
+//                          → { title, cards: [{ front, back, hint, source }] }
 //
 // Multiple-choice questions are marked on the iPad (the right option is in the quiz); short answers come back here.
 import { generateJSON } from "./llm.js";
 import { speak } from "./tts.js";
 import { despeak } from "./steps.js";
 import { plain } from "./lesson.js";
-import { QUIZ_SYSTEM, buildQuizText, QUIZ_GRADE_SYSTEM, buildQuizGradeText, NOTES_ASK_SYSTEM, buildNotesAskText } from "./prompt.js";
+import { FLASHCARDS_SYSTEM, buildFlashcardsText, QUIZ_SYSTEM, buildQuizText, QUIZ_GRADE_SYSTEM, buildQuizGradeText, NOTES_ASK_SYSTEM, buildNotesAskText } from "./prompt.js";
 
 const isMock = () => process.env.HALO_MOCK === "1";
 const clip = (value, n) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -65,6 +67,37 @@ export function cleanQuiz(raw, { random = Math.random } = {}) {
   return { title: clip(raw?.title, 60) || "Quiz on your notes", questions: questions.slice(0, 8) };
 }
 
+/** How many cards the notes can carry: 6 for a short note, up to 14 for a lot of notes. */
+export function cardCount(notes, handwritten = false) {
+  const words = notes.reduce((n, note) => n + note.text.split(/\s+/).filter(Boolean).length, 0) + (handwritten ? 120 : 0);
+  return Math.max(6, Math.min(14, 5 + Math.round(words / 80)));
+}
+
+/** The model's deck, checked: complete cards only, no repeated fronts, everything clipped to fit a card. */
+export function cleanFlashcards(raw) {
+  const cards = [], seen = new Set();
+  for (const c of Array.isArray(raw?.cards) ? raw.cards.slice(0, 20) : []) {
+    const front = clip(c?.front, 160), back = clip(c?.back, 280);
+    const key = front.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (!front || !back || seen.has(key)) continue;
+    seen.add(key);
+    cards.push({ front, back, hint: clip(c?.hint, 90), source: clip(c?.source, 200) });
+  }
+  if (cards.length < 3) throw new Error("Halo couldn't make flash cards from these notes. Add a little more to them and try again.");
+  return { title: clip(raw?.title, 60) || "Flash cards", cards: cards.slice(0, 16) };
+}
+
+/** Offline: "term: meaning" lines become term → meaning cards; other lines become "what did you note about…". */
+export function mockFlashcards(notes) {
+  const lines = notes.flatMap((n) => n.text.split("\n")).map((l) => l.replace(/^[•\-*\s]+/, "").trim()).filter((l) => l.length > 6);
+  const cards = lines.slice(0, 10).map((line) => {
+    const split = line.match(/^(.{2,60}?)\s*(?::|—|–|->|→|=)\s*(.+)$/);
+    return split ? { front: `What is ${split[1]}?`, back: split[2], hint: "", source: line }
+      : { front: `What did you note about "${line.split(" ").slice(0, 4).join(" ")}…"?`, back: line, hint: "", source: line };
+  });
+  return { title: notes[0]?.title || "Flash cards", cards };
+}
+
 export function cleanGrade(raw) {
   const verdict = VERDICTS.has(raw?.verdict) ? raw.verdict : "wrong";
   return { verdict, say: plain(clip(raw?.say, 220)) || (verdict === "right" ? "That's it." : "Not quite. Have a look at your notes on this.") };
@@ -104,6 +137,25 @@ export function installNotesQuiz(app) {
       res.json(quiz);
     } catch (e) {
       console.error("[quiz] error", e);
+      res.status(500).json({ error: e.message || String(e) });
+    }
+  });
+
+  app.post("/api/notes/flashcards", async (req, res) => {
+    const b = req.body ?? {};
+    const notes = readNotes(b.notes);
+    const images = typeof b.image === "string" && b.image ? [{ mime: "image/jpeg", data: b.image, label: "The student's handwritten notes:" }] : [];
+    if (!notes.length && !images.length) return res.status(400).json({ error: "notes required" });
+    const t0 = Date.now();
+    try {
+      const count = cardCount(notes, images.length > 0);
+      const raw = isMock() ? mockFlashcards(notes) : await generateJSON({ images, system: FLASHCARDS_SYSTEM,
+        text: buildFlashcardsText({ notes, document: clip(b.document, 120), count, learner: b.learner, handwritten: images.length > 0 }) });
+      const deck = cleanFlashcards(raw);
+      console.log(`[flashcards] "${deck.title}" ${deck.cards.length} cards from ${notes.length} notes in ${Date.now() - t0}ms`);
+      res.json(deck);
+    } catch (e) {
+      console.error("[flashcards] error", e);
       res.status(500).json({ error: e.message || String(e) });
     }
   });

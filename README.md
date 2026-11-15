@@ -116,6 +116,14 @@ Simulator: launch with `--scene3d brain [--touch hippocampus] [--explore-view ha
 
 Brain geometry: BodyParts3D, © The Database Center for Life Science, licensed under CC Attribution-Share Alike 2.1 Japan (credited in the viewer). Three.js is MIT.
 
+## Flash cards from your notes (`POST /api/notes/flashcards`)
+
+In **My notes** (or quick notes), tap Halo and choose **Make flash cards** for the open note, or **Flash cards from all my notes**. You can also type or say "make flash cards" anywhere. Halo writes one idea per card from your own words (handwriting included). Tap a card to flip it, then **Got it** or **Again** (or swipe right / left); "again" cards come back at the end, and the last screen lists the ones worth another go. A note's deck is saved with it and reopens as it was until the note changes; **New cards** writes a fresh deck.
+
+The request is the same as the quiz's (`{ notes: [{ title, text }], image?, document?, learner? }`) and returns `{ title, cards: [{ front, back, hint, source }] }`. Simulator: `--quick-note "line|line" --flashcards [all] [--flip "fkfa"]` (f flips, k is Got it, a is Again).
+
+**Home:** every page (the reader, notes, the lesson, quiz, recap, flash cards, the web board and the 3D explorer) has a house button that saves and goes straight back to the start screen. Saying or typing "go home" does the same.
+
 ## Halo watches you work (`POST /api/check`)
 
 The student solves a problem by hand; when they pause, the client sends an image of the working. A LangGraph agent ([server/tutor.js](server/tutor.js)) decides whether to stay quiet, draw a ✓, or circle the first wrong line and give a hint (never the answer).

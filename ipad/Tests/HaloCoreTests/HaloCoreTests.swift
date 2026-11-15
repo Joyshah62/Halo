@@ -2,6 +2,21 @@ import Foundation
 import HaloCore
 
 final class HaloCoreChecks {
+    func testFlashcardsDecodeSaveAndStaleness() throws {
+        let json = #"{"title":"Cells","cards":[{"front":"What does the nucleus hold?","back":"DNA","hint":"","source":"nucleus holds DNA"},{"front":"Energy?","back":"ATP"}]}"#
+        var deck = try JSONDecoder().decode(FlashcardDeck.self, from: Data(json.utf8))
+        try expectEqual(deck.cards.count, 2); try expectEqual(deck.cards[1].hint, "")
+        var entry = NotebookEntry(pageIndex: 0); entry.text = "nucleus holds DNA"
+        deck.madeFrom = entry.contentStamp; entry.flashcards = deck
+        let restored = try JSONDecoder().decode(NotebookEntry.self, from: JSONEncoder().encode(entry))
+        try expectEqual(restored.flashcards?.cards.map(\.id), deck.cards.map(\.id))
+        try expectEqual(restored.flashcards?.madeFrom, restored.contentStamp)
+        entry.text += " and more"
+        try expectEqual(entry.contentStamp == deck.madeFrom, false)
+        // Notes saved before flash cards existed still load.
+        let old = try JSONDecoder().decode(NotebookEntry.self, from: Data(#"{"id":"\#(UUID().uuidString)","title":"","text":"hi","pageIndex":0,"createdAt":0,"updatedAt":0}"#.utf8))
+        try expectNil(old.flashcards)
+    }
     func testScene3DStreamingAndPersistence() throws {
         let json = #"{"index":0,"say":"Follow the axon.","ink":[{"type":"scene3d","model":"neuron","focus":"axon","caption":"Toward the terminals."}]}"#
         let step = try JSONDecoder().decode(AnswerStep.self, from: Data(json.utf8))
@@ -163,6 +178,7 @@ private func expectThrows<T>(_ expression: @autoclosure () throws -> T) throws {
     }
     static func run() async throws {
         let checks = HaloCoreChecks()
+        try checks.testFlashcardsDecodeSaveAndStaleness(); print("PASS: flash cards decoding, saving with the note, and staleness")
         try checks.testScene3DStreamingAndPersistence(); print("PASS: 3D scene decoding, persistence and legacy compatibility")
         try checks.testReverseCropAndClamping(); print("PASS: normalized crop geometry")
         try checks.testDocumentQuestionsAndSampling(); print("PASS: whole-document questions and sampling")

@@ -29,6 +29,8 @@ struct NotebookView: View {
             .navigationTitle(store.notebookIsLoose ? "Quick notes" : "My notes").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
+                    Button { Task { await store.goHome() } } label: { BarIcon("house") }
+                        .accessibilityLabel("Home").accessibilityHint("Back to the start screen")
                     Button { withAnimation(.spring(duration: 0.35)) { showList.toggle() } } label: { Image(systemName: "sidebar.left") }
                         .accessibilityLabel(showList ? "Hide the list of notes" : "Show the list of notes")
                     Button { store.newNote() } label: { Label("New note", systemImage: "plus") }.labelStyle(.titleAndIcon)
@@ -38,6 +40,10 @@ struct NotebookView: View {
         }
         .diveBoard(store)
         .fullScreenCover(isPresented: Binding(get: { store.showQuiz }, set: { if !$0 { store.closeQuiz() } })) { QuizView(store: store) }
+        .background {
+            // A second full-screen page from the notebook: on its own view, so it never competes with the quiz's.
+            Color.clear.fullScreenCover(isPresented: Binding(get: { store.showFlashcards }, set: { if !$0 { store.closeFlashcards() } })) { FlashcardsView(store: store) }
+        }
     }
 
     private var list: some View {
@@ -836,6 +842,14 @@ private struct NotesHalo: View {
             }
             if store.quizzableNotes.count > 1 {
                 tile("square.stack.3d.up", "Quiz me on all my notes", "\(store.quizzableNotes.count) notes", HaloStyle.ink, enabled: true) { store.startQuiz(allNotes: true) }
+            }
+            tile("rectangle.on.rectangle.angled", open?.flashcards == nil ? "Make flash cards" : "My flash cards",
+                 open.map { note in note.flashcards.map { $0.madeFrom == note.contentStamp ? "\($0.cards.count) cards, ready to practise" : "the note changed: I’ll make new ones" } ?? "flip, recall, repeat" } ?? "open a note with something in it",
+                 HaloKit.leaf, enabled: open != nil) {
+                store.startFlashcards(allNotes: false)
+            }
+            if store.quizzableNotes.count > 1 {
+                tile("rectangle.stack", "Flash cards from all my notes", "\(store.quizzableNotes.count) notes", HaloKit.leaf, enabled: true) { store.startFlashcards(allNotes: true) }
             }
             tile("sparkles", open?.enhanced == nil ? "Improve this note" : "Improve it again", "organized, filled in, a diagram if it helps", HaloKit.amber,
                  enabled: open != nil && store.enhancingNote == nil) {

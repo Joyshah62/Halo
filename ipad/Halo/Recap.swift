@@ -41,6 +41,7 @@ struct RecapView: View {
                         }
                     }
                     .padding(3).background(Color.white, in: Capsule()).overlay(Capsule().stroke(HaloStyle.ink.opacity(0.12)))
+                    HomeButton { Task { await store.goHome() } }
                     CloseButton(label: "Done") { store.closeRecap() }
                 }
             }

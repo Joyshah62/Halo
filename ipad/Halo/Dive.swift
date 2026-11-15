@@ -160,6 +160,7 @@ struct DiveBoard: View {
                             .foregroundStyle(dive.saved ? HaloStyle.ink : .white)
                     }.buttonStyle(.plain).disabled(dive.saved).transition(.scale.combined(with: .opacity))
                 }
+                HomeButton { Task { await store.goHome() } }
                 Button { store.closeDive() } label: {
                     Image(systemName: "xmark").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38)
                         .background(Color.white, in: Circle()).overlay(Circle().stroke(HaloStyle.ink.opacity(0.12))).foregroundStyle(HaloStyle.text)

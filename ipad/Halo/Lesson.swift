@@ -517,6 +517,7 @@ struct LessonBoard: View {
             roundButton(coach.voice ? "speaker.wave.2" : "speaker.slash", label: coach.voice ? "Mute tutor" : "Read aloud") { coach.voice.toggle(); if !coach.voice { coach.hush() } }
             roundButton(coach.saved ? "checkmark" : "square.and.arrow.down", label: "Save lesson to my notes") { store.saveLesson() }
                 .disabled(coach.plan == nil || coach.busy || coach.saved)
+            HomeButton { Task { await store.goHome() } }
             CloseButton(label: "Return to book; keep lesson") { store.showLesson = false }
         }
     }

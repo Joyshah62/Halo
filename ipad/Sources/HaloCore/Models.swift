@@ -304,6 +304,8 @@ public struct NotebookEntry: Codable, Equatable, Identifiable, Sendable {
     public var inkVersion: Int?
     /// Parts of the handwriting the student circled and had Halo refine, kept beside them on the page.
     public var refinements: [NoteRefinement]?
+    /// The last flash cards Halo made from this note, kept so the student can come back to them.
+    public var flashcards: FlashcardDeck?
     public init(pageIndex: Int) { self.pageIndex = pageIndex }
     public var isEmpty: Bool { drawing == nil && title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     /// Identifies the note's content (typed and handwritten) as it is now.
@@ -716,6 +718,46 @@ public struct QuizQuestion: Codable, Equatable, Identifiable, Sendable {
         self.explain = explain; self.source = source; self.audio = audio
     }
 }
+/// Flash cards made from the student's notes. The request is the same as a quiz's (`QuizRequest`).
+public struct FlashcardDeck: Codable, Equatable, Sendable {
+    public var title: String
+    public var cards: [Flashcard]
+    /// The note's `signature` when the cards were made, so the app can tell when the note has changed since.
+    public var madeFrom: String?
+    public var createdAt: Date?
+    public init(title: String, cards: [Flashcard], madeFrom: String? = nil, createdAt: Date? = Date()) {
+        self.title = title; self.cards = cards; self.madeFrom = madeFrom; self.createdAt = createdAt
+    }
+}
+public struct Flashcard: Codable, Equatable, Identifiable, Sendable {
+    public var id = UUID()
+    public var front: String
+    public var back: String
+    public var hint: String
+    /// The line of the student's notes this card comes from.
+    public var source: String
+    enum CodingKeys: String, CodingKey { case id, front, back, hint, source }
+    public init(front: String, back: String, hint: String = "", source: String = "") {
+        self.front = front; self.back = back; self.hint = hint; self.source = source
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // Cards from the server have no id; saved ones keep theirs.
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        front = try c.decode(String.self, forKey: .front); back = try c.decode(String.self, forKey: .back)
+        hint = try c.decodeIfPresent(String.self, forKey: .hint) ?? ""
+        source = try c.decodeIfPresent(String.self, forKey: .source) ?? ""
+    }
+}
+public extension NotebookEntry {
+    /// A short fingerprint of the note as it is now (stable across launches, unlike `hashValue`).
+    var contentStamp: String {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in signature.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100000001b3 }
+        return String(hash, radix: 16)
+    }
+}
+
 public struct QuizGradeRequest: Encodable, Sendable {
     public var ask: String
     public var expected: String

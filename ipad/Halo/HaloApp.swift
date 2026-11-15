@@ -72,10 +72,10 @@ struct LibraryView: View {
                     else { welcome }
                 }
                 .toolbar {
-                    // The library is one labelled button, here and on the start screen, instead of a bare sidebar icon.
+                    // The library, here and on the start screen. In a document, Home sits beside it.
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { withAnimation { columns = columns == .detailOnly ? .all : .detailOnly } } label: { BarLabel("Library", "books.vertical") }
-                            .accessibilityHint("Your documents, quick notes and the sample lesson")
+                        Button { withAnimation { columns = columns == .detailOnly ? .all : .detailOnly } } label: { BarIcon("books.vertical") }
+                            .accessibilityLabel("Library").accessibilityHint("Your documents, quick notes and the sample lesson")
                     }
                 }
             }
@@ -202,6 +202,15 @@ struct LibraryView: View {
     }
 }
 
+/// A toolbar button that is just its symbol (the button carries the spoken name).
+struct BarIcon: View {
+    let icon: String
+    init(_ icon: String) { self.icon = icon }
+    var body: some View {
+        Image(systemName: icon).font(.system(size: 19, weight: .medium)).frame(minWidth: 30, minHeight: 30)
+    }
+}
+
 /// A toolbar button label that always shows its word: iPadOS reduces a toolbar `Label` to its icon.
 struct BarLabel: View {
     let title: String
@@ -261,6 +270,10 @@ struct StudioView: View {
         .navigationTitle(store.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { Task { await store.goHome() } } label: { BarIcon("house") }
+                    .accessibilityLabel("Home").accessibilityHint("Back to the start screen. Your place and notes are saved.")
+            }
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 1) {
                     Text(store.displayTitle).font(HaloKit.text(17, .semibold)).lineLimit(1)
@@ -270,23 +283,23 @@ struct StudioView: View {
                 }.frame(maxWidth: 420)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                // Every button says what it does (one group, so iPadOS keeps the words). Halo, the avatar, is there for anything else.
-                HStack(spacing: 14) {
-                    Button { store.openLesson() } label: { BarLabel("Teach me", "graduationcap") }
-                        .accessibilityHint("Halo teaches this chapter one idea at a time")
-                    Button { store.openNavigator(store.navigatorTab) } label: { BarLabel("Contents", "list.bullet.rectangle") }
-                        .accessibilityHint("Chapters, search, and the questions you asked Halo")
-                        .popover(isPresented: $store.showNavigator) { NavigatorView(store: store).frame(minWidth: 420, idealWidth: 420, minHeight: 300, idealHeight: 660) }
-                    Button { store.openNotebook() } label: { BarLabel("My notes", "square.and.pencil") }
-                        .accessibilityHint("Your own notes on this document")
+                // The two things you came to do, then everything else under More. Halo, the avatar, is there for anything else.
+                HStack(spacing: 22) {
+                    Button { store.openLesson() } label: { BarIcon("graduationcap") }
+                        .accessibilityLabel("Teach me").accessibilityHint("Halo teaches this chapter one idea at a time")
+                    Button { store.openNotebook() } label: { BarIcon("square.and.pencil") }
+                        .accessibilityLabel("My notes").accessibilityHint("Your own notes on this document")
                     Menu {
+                        Button { store.openNavigator(store.navigatorTab) } label: { Label("Contents & search", systemImage: "list.bullet.rectangle") }
                         Button { store.openRecap() } label: { Label("Session summary", systemImage: "list.clipboard") }
                         Button { store.showBrief() } label: { Label(store.isBook ? "Halo’s read of this chapter" : "Halo’s read of this document", systemImage: "sparkles") }
                         Divider()
                         Button(action: openSettings) { Label("Settings", systemImage: "gearshape") }
-                    } label: { Image(systemName: "ellipsis.circle").font(.system(size: 17, weight: .medium)).padding(.horizontal, 4) }
-                    .accessibilityLabel("More: session summary, Halo’s read, settings")
+                    } label: { BarIcon("ellipsis.circle") }
+                    .accessibilityLabel("More: contents and search, session summary, Halo’s read, settings")
                 }
+                // Contents opens from here, wherever it was asked for (the menu, Halo, or "find …").
+                .popover(isPresented: $store.showNavigator, arrowEdge: .top) { NavigatorView(store: store).frame(minWidth: 420, idealWidth: 420, minHeight: 300, idealHeight: 660) }
             }
         }
     }

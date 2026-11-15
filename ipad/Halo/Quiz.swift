@@ -253,6 +253,7 @@ struct QuizView: View {
                     .frame(width: 44, height: 44).background(Color.white, in: Circle()).overlay(Circle().stroke(HaloStyle.ink.opacity(0.12)))
                     .foregroundStyle(HaloStyle.text)
             }.buttonStyle(.plain).accessibilityLabel(coach.voice ? "Mute Halo" : "Read questions aloud")
+            HomeButton { coach.close(); Task { await store.goHome() } }
             CloseButton(label: "Back to my notes") { coach.close(); store.closeQuiz() }
         }
     }
