@@ -48,6 +48,15 @@ export function plain(text) {
   return cut.split(/\s+/).filter(Boolean).length >= 3 ? cut[0].toUpperCase() + cut.slice(1) : String(text ?? "");
 }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Short lessons (the demo document, see replay.js): the student can't answer until Halo stops talking, so every
+// turn is cut down. The prompts ask for it; the caps below hold it if a model runs long anyway.
+const BRIEF = {
+  plan: "KEEP THIS LESSON SHORT (it overrides the limits above): exactly 3 concepts, \"say\" at most 20 words, each hook at most 16 words.",
+  teach: "KEEP THIS TURN SHORT (it overrides the limits above): 1 or 2 beats, each ONE sentence of at most 18 words, about 10 seconds spoken in total, one ink item per beat. The question you hand back is at most 15 words.",
+  grade: "KEEP THIS TURN SHORT (it overrides the limits above): \"say\" is one sentence of at most 16 words; at most 1 step of one sentence (at most 18 words); the follow-up ask is at most 15 words.",
+  wrap: "KEEP IT SHORT: \"say\" is at most 2 sentences and 25 words.",
+};
+const brevity = (state, part) => (state.brief ? `\n\n${BRIEF[part]}` : "");
 
 // What a person says in the second after you answer them, before they have worked out their reply.
 // The app plays one the moment the student answers, so there is no dead air while the model thinks.
@@ -121,10 +130,10 @@ async function plan(state, config) {
   const voices = fillers();
   // What this learner has been through before, from Halo's memory (Backboard when configured). Never blocks the lesson.
   const covered = await Promise.race([coveredTopics(learnerKey(state.learnerId)).catch(() => []), sleep(1500).then(() => [])]);
-  const raw = isMock() ? MOCK_PLAN : await generateJSON({ system: PLAN_SYSTEM, text: planText(state, covered) });
+  const raw = isMock() ? MOCK_PLAN : await generateJSON({ system: PLAN_SYSTEM, text: planText(state, covered) + brevity(state, "plan") });
   const pageNumbers = state.pages.map((p) => p.page);
   const first = pageNumbers[0];
-  const concepts = (Array.isArray(raw.concepts) ? raw.concepts : []).slice(0, 7).map((c, i) => ({
+  const concepts = (Array.isArray(raw.concepts) ? raw.concepts : []).slice(0, state.brief ? 3 : 7).map((c, i) => ({
     n: i + 1, name: clip(c?.name, 60) || `concept ${i + 1}`, why: clip(c?.why, 110),
     page: pageNumbers.reduce((best, page) => Math.abs(page - Number(c?.page || first)) < Math.abs(best - Number(c?.page || first)) ? page : best, first), kind: KINDS.has(c?.kind) ? c.kind : "idea",
     minutes: Math.min(4, Math.max(1, Math.round(Number(c?.minutes) || 2))), hook: despeak(clip(c?.hook, 220)),
@@ -283,8 +292,9 @@ async function teach(state, config) {
     for (const step of steps) { queue.push(step); await sleep(150); }
     asked = canned.ask;
   } else {
-    await readLines(streamText({ images: [], system: TEACH_SYSTEM, text: teachText({ ...state, material }, concept) }), (obj) => {
+    await readLines(streamText({ images: [], system: TEACH_SYSTEM, text: teachText({ ...state, material }, concept) + brevity(state, "teach") }), (obj) => {
       if (typeof obj.ask === "string") asked = obj;
+      else if (state.brief && queue.steps.length >= 2) return;
       else queue.push(queue.steps.length || typeof obj.say !== "string" ? obj : { ...obj, say: plain(obj.say) });
     });
   }
@@ -408,14 +418,14 @@ async function grade(state, config) {
 
   const answer = clip(reply.answer, 1500);
   const t0 = Date.now();
-  const raw = isMock() ? mockGrade(state, concept, answer) : await generateJSON({ system: GRADE_SYSTEM, text: gradeText(state, concept, answer) });
+  const raw = isMock() ? mockGrade(state, concept, answer) : await generateJSON({ system: GRADE_SYSTEM, text: gradeText(state, concept, answer) + brevity(state, "grade") });
   if (!VERDICTS.has(raw?.verdict)) throw new Error("Halo couldn’t assess that answer. Please try again.");
   const verdict = raw.verdict;
   const say = plain(despeak(clip(raw?.say, 260))) || { got_it: "That's it.", almost: "Close, nearly there.", missed: "Let's look at it another way.", question: "Good question." }[verdict];
   const note = clip(raw?.note, 80);
   emit("grade", { n: concept.n, verdict, say, audio: await speak(say), note });
   const queue = new StepQueue((step) => emit("step", step));
-  for (const step of (Array.isArray(raw?.steps) ? raw.steps : []).slice(0, 3)) queue.push(step);
+  for (const step of (Array.isArray(raw?.steps) ? raw.steps : []).slice(0, state.brief ? 1 : 3)) queue.push(step);
   await queue.drain();
 
   const attempts = state.attempts + (verdict === "question" ? 0 : 1);
@@ -491,7 +501,7 @@ async function wrap(state, config) {
       `Earlier weak spots: ${earlier.length ? earlier.join("; ") : "none"}`,
       `Lesson "${plan.title}" (${state.title}${state.chapter ? `, ${state.chapter}` : ""}). Thread: ${plan.thread}`,
       `Roadmap and how each check went:\n${plan.concepts.map((c) => { const t = transcript.filter((x) => x.n === c.n); return `${c.n}. ${c.name} — ${t.length ? t.map((x) => `asked "${x.ask}" → "${clip(x.answer, 120) || "(skipped)"}" (${x.verdict.replace("_", " ")})`).join("; ") : "not reached"}`; }).join("\n")}`,
-      "Write the send-off as JSON.",
+      "Write the send-off as JSON." + brevity(state, "wrap"),
     ].filter(Boolean).join("\n\n") });
   }
   const say = despeak(clip(raw?.say, 320)) || "That's the chapter. Nice work today.";
@@ -521,7 +531,7 @@ const LessonState = Annotation.Root({
   id: Annotation(), title: Annotation(), chapter: Annotation(), pages: Annotation(), learner: Annotation(), learnerId: Annotation(),
   plan: Annotation(), current: Annotation(), attempts: Annotation(), question: Annotation(), reply: Annotation(),
   teaching: Annotation(), exchanges: Annotation(), material: Annotation(), outcome: Annotation(), mastery: Annotation(), transcript: Annotation(), summary: Annotation(),
-  announced: Annotation(), hooked: Annotation(), guess: Annotation(), review: Annotation(), styles: Annotation(),
+  announced: Annotation(), hooked: Annotation(), guess: Annotation(), review: Annotation(), styles: Annotation(), brief: Annotation(),
 });
 
 export const lessonGraph = new StateGraph(LessonState)
@@ -566,7 +576,7 @@ export async function startLesson(input, send) {
   pages.sort((a, b) => a.page - b.page);
   // Weak spots from earlier quizzes and lessons travel with the learner, so every step can give them more care.
   input = { ...input, pages, learner: await withWeakSpots(input.learner, input.learnerId) };
-  if (replay.inScope(input.title, input.chapter, ...pages.map((p) => p.text))) return startReplayed(input, send);
+  if (replay.inScope(input.title, input.chapter, ...pages.map((p) => p.text))) return startReplayed({ ...input, brief: true }, send);
   const id = randomUUID();
   return run(id, { ...input, id }, send);
 }

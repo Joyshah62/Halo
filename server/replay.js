@@ -107,7 +107,9 @@ export function saveAnswer(b, events) {
 // ---------- lessons ----------
 // One file per chapter: a tree of the conversation. Each node is one response from Halo, with the LangGraph thread
 // and checkpoint it left the lesson paused at, so an answer nobody has given before continues live from there.
-export const lessonFile = (pages) => `lesson-${hash(pages.map((p) => `${p.page}:${norm(p.text)}`).join("\n"))}.json`;
+// The version is part of the key: when the lesson's style changes (v2: short turns), older recordings stop replaying.
+const LESSON_VERSION = "v2-brief";
+export const lessonFile = (pages) => `lesson-${hash(LESSON_VERSION + "\n" + pages.map((p) => `${p.page}:${norm(p.text)}`).join("\n"))}.json`;
 export const loadLesson = (name) => read(name);
 export const saveLesson = (name, tree) => write(name, tree);
 
