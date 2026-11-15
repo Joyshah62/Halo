@@ -1,0 +1,72 @@
+# Render Blueprint for the Halo server. Render → New → Blueprint → pick this repo.
+# Secrets marked `sync: false` are asked for once in the Render dashboard; they are never stored here.
+services:
+  - type: web
+    name: halo-server
+    runtime: node
+    rootDir: server            # the whole repo is still cloned, so ../shared resolves
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    # Starter stays awake (free instances sleep after 15 idle minutes, ~1 min cold start)
+    # and is required for the persistent disk below.
+    plan: starter
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - server/**
+        - shared/**
+        - render.yaml
+    # SQLite question log, lesson checkpoints, learner memory and logs survive deploys here.
+    disk:
+      name: halo-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: HALO_DB_PATH
+        value: /var/data/halo.db
+      - key: HALO_LESSON_DB_PATH
+        value: /var/data/lessons.sqlite
+      - key: HALO_MEMORY_DIR
+        value: /var/data/memory
+      - key: HALO_LOG_DIR
+        value: /var/data/logs
+      - key: HALO_MOCK
+        value: "0"
+      # Brain
+      - key: HALO_PROVIDER
+        value: gemini
+      - key: HALO_MODEL
+        value: gemini-3.5-flash
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Voice
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        value: OYTbf65OHHFELVut7v2H
+      - key: ELEVENLABS_MODEL_ID
+        value: eleven_v3_conversational
+      - key: ELEVENLABS_ACCENT
+        value: American
+      - key: ELEVENLABS_OUTPUT_FORMAT
+        value: mp3_44100_128
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: BACKBOARD_API_KEY
+        sync: false
+      # File storage: S3 for bytes, MongoDB Atlas for the links
+      - key: AWS_S3_BUCKET
+        sync: false
+      - key: AWS_REGION
+        value: us-east-1
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: MONGODB_URI
+        sync: false

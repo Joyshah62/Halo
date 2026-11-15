@@ -5,8 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node --no-warnings index.js",
-    "dev": "node --no-warnings --watch-preserve-output --watch-path=./index.js --watch-path=./prompt.js --watch-path=./llm.js --watch-path=./tts.js --watch-path=./db.js --watch-path=./tutor.js --watch-path=./mathcheck.js --watch-path=./web.js --watch-path=./steps.js --watch-path=./lesson-store.js --watch-path=./lesson.js --watch-path=./lesson-material.js --watch-path=./logging.js --watch-path=./sse.js --watch-path=./documents.js --watch-path=./stuck.js --watch-path=./learner-memory.js --watch-path=./notation.js --watch-path=./notes-quiz.js index.js",
-    "test": "HALO_MEMORY_DIR=${TMPDIR:-/tmp}/halo-test-memory node --no-warnings --test *.test.mjs"
+    "dev": "node --no-warnings --watch-preserve-output --watch-path=./index.js --watch-path=./prompt.js --watch-path=./llm.js --watch-path=./tts.js --watch-path=./db.js --watch-path=./tutor.js --watch-path=./mathcheck.js --watch-path=./web.js --watch-path=./steps.js --watch-path=./lesson-store.js --watch-path=./lesson.js --watch-path=./lesson-material.js --watch-path=./logging.js --watch-path=./sse.js --watch-path=./documents.js --watch-path=./stuck.js --watch-path=./learner-memory.js --watch-path=./notation.js --watch-path=./notes-quiz.js --watch-path=./storage.js index.js",
+    "test": "HALO_MEMORY_DIR=${TMPDIR:-/tmp}/halo-test-memory node --no-warnings --test *.test.mjs",
+    "check:storage": "node --no-warnings scripts/check-storage.mjs"
   },
   "keywords": [],
   "author": "",
@@ -14,6 +15,7 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^1.7.0",
+    "@aws-sdk/client-s3": "^3.1169.0",
     "@google/genai": "^3.0.0",
     "@langchain/core": "^1.3.7",
     "@langchain/google": "^0.2.15",
@@ -28,6 +30,10 @@
     "langchain": "^1.6.6",
     "mathjax-full": "^3.2.2",
     "mathjs": "^15.2.0",
+    "mongodb": "^7.9.0",
     "zod": "^4.6.7"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

@@ -195,7 +195,34 @@ The server exposes `POST /api/lesson/start` with `{ title, chapter, pages: [{ pa
 | `ELEVENLABS_VOICE_ID` | `VrUPKj92idNr4XrmO032` | "Hailey", a calm conversational voice |
 | `ELEVENLABS_MODEL_ID` | `eleven_multilingual_v2` | one model for every step, so the voice never changes mid-answer |
 | `GEMINI_IMAGE_MODEL` | `gemini-2.5-flash-image` | illustrations for the `image` primitive |
-| `HALO_MOCK` | `0` | `1` = canned answers, no API calls |
+| `HALO_MOCK` | `0` | `1` = canned answers, no API calls (also turns file storage off) |
+| `AWS_S3_BUCKET` / `AWS_REGION` | — / `us-east-1` | file storage bucket; with `MONGODB_URI` turns storage on |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | or any standard AWS credential source |
+| `AWS_S3_PREFIX` / `AWS_S3_PUBLIC_URL` | — | optional key prefix; CDN base URL instead of the S3 URL |
+| `MONGODB_URI` | — | Atlas connection string; records go to `MONGODB_DB` (`halo`) / `MONGODB_COLLECTION` (`files`) |
+
+## Deploy to Render
+
+[`render.yaml`](render.yaml) is a Render Blueprint for the server. Push to GitHub, then Render → **New → Blueprint** → pick this repo, and paste the secrets it asks for (Gemini, ElevenLabs, AWS, MongoDB). It runs `npm ci` / `npm start` in `server/` on Node 24, checks `/api/health`, and redeploys on every push that touches `server/`, `shared/` or `render.yaml`.
+
+- **Plan:** `starter` with a 1 GB disk at `/var/data` holding the SQLite question log, lesson checkpoints, learner memory and logs. On the free plan, delete the `disk` block and set `plan: free`: that data then resets on every deploy, and the server sleeps after 15 idle minutes.
+- **Office import:** Render's Node runtime has no LibreOffice, so `.ppt/.pptx/.doc/.docx` import returns "unavailable". PDFs work as usual.
+- **Clients:** set the server URL to `https://<service>.onrender.com` in the extension's side panel and in the iPad app's settings.
+- **Atlas:** Render's outbound IPs are not fixed, so allow `0.0.0.0/0` under Atlas Network Access (or use the IPs listed in the service's **Connect → Outbound** tab).
+
+## File storage (S3 + MongoDB Atlas)
+
+With `AWS_S3_BUCKET` and `MONGODB_URI` set, file bytes go to S3 and each file's record (`kind`, `bucket`, `key`, public `url`, `mime`, `size`, `name`, `meta`, `createdAt`) goes to MongoDB. `GET /api/health` reports `storage: true|false`. When either variable is missing, storage stays off and everything else works as before.
+
+| What | Where it's stored |
+|---|---|
+| `POST /api/files?kind=upload\|document&name=…` (raw bytes, `Content-Type` = file type, ≤ 25 MB) | returns `201 { file }` |
+| `GET /api/files?kind=&limit=` | lists records, newest first |
+| Converted Office documents (`/api/documents/convert`) | kind `document`; link in the `X-Halo-File-Url` response header |
+| Note diagrams (`/api/notes/image`) | kind `note-image`; `image.url` added to the reply |
+| Ask screenshots (`/api/ask`) | kind `screenshot`, `meta.questionId` links it to the question; uploaded in the background |
+
+URLs are public, so the bucket needs public read: turn off **Block public access** for it and add a bucket policy granting `s3:GetObject` on `arn:aws:s3:::<bucket>/*`. The server's IAM user needs `s3:PutObject` on the same resource. In Atlas, allow the server's IP under **Network Access**.
 
 Server URL is editable at the bottom of the side panel (for a hosted backend on demo day).
 

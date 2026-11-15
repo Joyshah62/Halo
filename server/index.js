@@ -16,6 +16,7 @@ import { cleanStep, despeak, prepareStep } from "./steps.js";
 import { catalog as scenes, cleanExplorer } from "../shared/scene3d/schema.js";
 import { startLesson, continueLesson } from "./lesson.js";
 import { installNotesQuiz } from "./notes-quiz.js";
+import { storeFile, tryStoreFile, listFiles, storageEnabled, StorageError, MAX_FILE_BYTES } from "./storage.js";
 
 const PORT = Number(process.env.PORT || 8787);
 installProcessLogging();
@@ -24,11 +25,15 @@ app.use(cors());
 app.use(requestLogging);
 app.use(express.json({ limit: "25mb" }));
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, provider: PROVIDER, model: MODEL, tts: ttsEnabled, voice: ttsEnabled ? ttsVoice : null }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, provider: PROVIDER, model: MODEL, tts: ttsEnabled, voice: ttsEnabled ? ttsVoice : null, storage: storageEnabled }));
 // Raw bytes avoid base64 overhead. Files and conversion profiles are removed after each request.
+// With storage on, the converted PDF is also kept in S3; its public link comes back in X-Halo-File-Url.
 app.post("/api/documents/convert", express.raw({ type: "application/octet-stream", limit: "25mb" }), async (req, res) => {
   try {
     const pdf = await convertOffice(req.body, req.query.extension);
+    const name = typeof req.query.name === "string" ? req.query.name.replace(/\.[^.]+$/, "") + ".pdf" : undefined;
+    const stored = await tryStoreFile({ data: pdf, mime: "application/pdf", kind: "document", name, meta: { convertedFrom: String(req.query.extension || "").toLowerCase() } });
+    if (stored) res.set({ "X-Halo-File-Url": stored.url, "X-Halo-File-Id": stored.id });
     res.set({ "Content-Type": "application/pdf", "Cache-Control": "no-store" }).send(pdf);
   } catch (error) {
     res.status(error instanceof ImportError ? error.status : 500).json({ error: error instanceof ImportError ? error.message : "The document could not be imported. Please try again." });
@@ -38,6 +43,35 @@ app.post("/api/documents/convert", express.raw({ type: "application/octet-stream
 app.use("/api/documents/convert", (error, _req, res, next) => {
   if (error.type === "entity.too.large") return res.status(413).json({ error: "Choose a document smaller than 25 MB." });
   next(error);
+});
+
+// ---------- Files: bytes in S3, link + details in MongoDB Atlas (storage.js) ----------
+// POST /api/files?kind=upload|document&name=notes.pdf  body: raw bytes, Content-Type = the file's type
+//   → { file: { id, kind, bucket, key, url, mime, size, name, meta, createdAt } }
+app.post("/api/files", express.raw({ type: () => true, limit: MAX_FILE_BYTES }), async (req, res) => {
+  try {
+    const kind = req.query.kind === "document" ? "document" : "upload";
+    const meta = {};
+    for (const field of ["title", "learner", "page"]) if (typeof req.query[field] === "string") meta[field] = req.query[field].slice(0, 200);
+    const file = await storeFile({
+      data: req.body, kind, meta,
+      mime: String(req.headers["content-type"] || "application/octet-stream").split(";")[0].trim().toLowerCase(),
+      name: typeof req.query.name === "string" ? req.query.name : undefined,
+    });
+    res.status(201).json({ file });
+  } catch (error) {
+    if (!(error instanceof StorageError)) log("files.error", { request: res.locals.requestID, ...errorDetails(error) }, "error");
+    res.status(error instanceof StorageError ? error.status : 502).json({ error: error instanceof StorageError ? error.message : "The file could not be stored. Please try again." });
+  }
+});
+app.use("/api/files", (error, _req, res, next) => {
+  if (error.type === "entity.too.large") return res.status(413).json({ error: "Choose a file smaller than 25 MB." });
+  next(error);
+});
+// GET /api/files?kind=&limit= → { files: [...] } newest first
+app.get("/api/files", async (req, res) => {
+  try { res.json({ files: await listFiles({ kind: typeof req.query.kind === "string" ? req.query.kind : undefined, limit: req.query.limit }) }); }
+  catch (error) { res.status(error instanceof StorageError ? error.status : 502).json({ error: error instanceof StorageError ? error.message : "Files could not be listed." }); }
 });
 
 app.get("/api/history", (_req, res) => res.json(db.history()));
@@ -71,6 +105,12 @@ app.post("/api/ask", async (req, res) => {
   res.locals.questionID = qid;
   trace("ask.started", { provider: PROVIDER, model: MODEL, image: Boolean(b.image), contextImage: Boolean(b.contextImage) });
   send("start", { id: qid });
+  // Keep the screenshots in S3 alongside the question; runs beside the answer and never delays it.
+  const shots = [[b.image, b.imageMime || "image/png", "crop"], [b.contextImage, "image/jpeg", "page"]].filter(([data]) => typeof data === "string" && data);
+  for (const [data, mime, role] of shots) {
+    tryStoreFile({ data: Buffer.from(data, "base64"), mime, kind: "screenshot", meta: { questionId: qid, role, pageUrl: b.pageUrl ?? null, pageTitle: b.pageTitle ?? null } })
+      .then((file) => file && log("ask.screenshot.stored", { request: res.locals.requestID, question: qid, role, url: file.url }));
+  }
 
   try {
   const images = [];
@@ -484,11 +524,17 @@ app.post("/api/notes/refine", async (req, res) => {
 
 // Quiz me on my notes, mark a short answer, ask about my notes (notes-quiz.js).
 installNotesQuiz(app);
-// POST /api/notes/image → { image: { mime, data (base64) } | null }: one diagram for a section of enhanced notes.
+// POST /api/notes/image → { image: { mime, data (base64), url? } | null }: one diagram for a section of enhanced notes.
+// url is the image's public S3 link when storage is on.
 app.post("/api/notes/image", async (req, res) => {
   const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim().slice(0, 300) : "";
   if (!prompt) return res.status(400).json({ error: "prompt required" });
-  res.json({ image: process.env.HALO_MOCK === "1" ? null : await generateImage(prompt) });
+  const image = process.env.HALO_MOCK === "1" ? null : await generateImage(prompt);
+  if (image?.data) {
+    const file = await tryStoreFile({ data: Buffer.from(image.data, "base64"), mime: image.mime || "image/png", kind: "note-image", meta: { prompt } });
+    if (file) image.url = file.url;
+  }
+  res.json({ image });
 });
 
 // ---------- Go deeper: Halo looks it up on the web (see web.js) ----------
