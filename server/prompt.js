@@ -113,9 +113,11 @@ export function describeLearner(learner) {
   if (learner.style) bits.push(`prefers: ${String(learner.style).slice(0, 80)}`);
   if (learner.goal) bits.push(`goal: ${String(learner.goal).slice(0, 120)}`);
   if (Array.isArray(learner.struggles) && learner.struggles.length) bits.push(`recently asked about (possible weak spots): ${learner.struggles.slice(0, 8).map((t) => String(t).slice(0, 40)).join(", ")}`);
+  const weak = Array.isArray(learner.weaknesses) ? learner.weaknesses.slice(0, 8).map((t) => String(t).slice(0, 60)).filter(Boolean) : [];
+  if (weak.length) bits.push(`weak spots from their recent quizzes and lessons: ${weak.join(", ")}`);
   if (!bits.length) return "";
   return `About this student — ${bits.join("; ")}.
-Personalize quietly: match the depth to their level and the style they prefer; if one of their recent weak spots is the same idea as this question, connect it in a phrase ("same move as the chain rule thing you asked about"); use their first name at most once per answer and only where a tutor naturally would. Never recite this profile back.`;
+Personalize quietly: match the depth to their level and the style they prefer; if one of their recent weak spots is the same idea as this question, connect it in a phrase ("same move as the chain rule thing you asked about"); where the material covers one of their weak spots, give it a little more practice or care; use their first name at most once per answer and only where a tutor naturally would. Never recite this profile back.`;
 }
 
 export function buildUserText({ question, pageTitle, pageUrl, circledText, pageText, documentText, previousAnswer, tutorMode, selectionMode, learner, pointing }) {

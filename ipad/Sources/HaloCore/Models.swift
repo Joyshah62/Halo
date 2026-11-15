@@ -651,6 +651,40 @@ public struct LessonGrade: Codable, Equatable, Sendable {
 public struct LessonMastery: Codable, Equatable, Sendable { public var n: Int; public var verdict: String }
 public struct LessonSummary: Codable, Equatable, Sendable {
     public var say: String; public var audio: String?; public var nailed: [String]; public var revisit: [String]; public var takeaway: String; public var mastery: [LessonMastery]
+    /// Strengths and weaknesses from the lesson's checks (absent from older servers).
+    public var insights: SessionInsights? = nil
+}
+
+/// What a quiz or a lesson showed about the student, written from their actual answers.
+public struct SessionInsights: Codable, Equatable, Sendable {
+    public struct Strength: Codable, Equatable, Sendable { public var point: String; public var why: String
+        public init(point: String, why: String) { self.point = point; self.why = why } }
+    public struct Weakness: Codable, Equatable, Sendable { public var point: String; public var next: String
+        public init(point: String, next: String) { self.point = point; self.next = next } }
+    public var strengths: [Strength]
+    public var weaknesses: [Weakness]
+    /// Weak spots from earlier sessions that this one shows they now have.
+    public var improved: [String]
+    public var isEmpty: Bool { strengths.isEmpty && weaknesses.isEmpty && improved.isEmpty }
+    public init(strengths: [Strength] = [], weaknesses: [Weakness] = [], improved: [String] = []) {
+        self.strengths = strengths; self.weaknesses = weaknesses; self.improved = improved
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        strengths = try c.decodeIfPresent([Strength].self, forKey: .strengths) ?? []
+        weaknesses = try c.decodeIfPresent([Weakness].self, forKey: .weaknesses) ?? []
+        improved = try c.decodeIfPresent([String].self, forKey: .improved) ?? []
+    }
+}
+/// A finished quiz, for /api/insights.
+public struct InsightsRequest: Encodable, Sendable {
+    public struct Item: Encodable, Sendable { public var ask, expected, answer, verdict, source: String }
+    public var kind = "quiz"
+    public var title: String
+    public var items: [Item]
+    /// Which learner's memory the weak spots are saved to: this device's anonymous ID.
+    public var learnerId = DeviceID.current
+    public init(title: String, items: [Item]) { self.title = title; self.items = items }
 }
 public enum LessonEvent: Equatable, Sendable {
     case plan(LessonPlan), concept(Int), material(LessonMaterial), question(LessonQuestion), grade(LessonGrade), finish(LessonSummary)
@@ -686,6 +720,8 @@ public struct QuizRequest: Encodable, Sendable {
     /// The handwritten part of a single note, as a base64 JPEG.
     public var image: String?
     public var learner: LearnerProfile?
+    /// Saved weak spots for this device's learner get more care in the questions.
+    public var learnerId = DeviceID.current
     public init(notes: [NotesPayload], document: String, image: String? = nil, learner: LearnerProfile? = nil) {
         self.notes = notes; self.document = document; self.image = image
         self.learner = learner.flatMap { $0.isEmpty ? nil : $0 }

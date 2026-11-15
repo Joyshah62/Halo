@@ -3,7 +3,8 @@ import SwiftUI
 // "Quiz me on my notes": Halo writes a short quiz from the student's own notes and asks it one question
 // at a time, out loud. Multiple choice is marked here (the right option comes with the quiz); a short
 // answer, typed or said, is marked by the server. Each answer gets a line on why, and the line of the
-// notes it came from. At the end: the score, what was missed, and a go at just those.
+// notes it came from. At the end: the score, strengths and weaknesses (saved to the learner's memory so
+// later quizzes and lessons give the weak spots more care), what was missed, and a go at just those.
 
 @MainActor
 final class QuizCoach: ObservableObject {
@@ -25,6 +26,9 @@ final class QuizCoach: ObservableObject {
     /// "this note" or "all your notes", for the header.
     @Published private(set) var scope = ""
     @Published private(set) var retrying = false
+    /// Strengths and weaknesses for the finished quiz; nil while Halo writes them, or when it couldn't.
+    @Published private(set) var insights: SessionInsights?
+    @Published private(set) var reading = false
     // The avatar: how long it is speaking for, and how it last reacted.
     @Published private(set) var speakingUntil = Date.distantPast
     @Published private(set) var reaction: TutorMood?
@@ -69,7 +73,7 @@ final class QuizCoach: ObservableObject {
     func load() {
         guard let request else { return }
         hush(); token = UUID(); let id = token
-        quiz = nil; full = nil; marks = [:]; index = 0; picked = nil; draft = ""; retrying = false; stage = .loading
+        quiz = nil; full = nil; marks = [:]; index = 0; picked = nil; draft = ""; retrying = false; insights = nil; reading = false; stage = .loading
         task = Task { [weak self] in
             guard let self else { return }
             do {
@@ -89,7 +93,7 @@ final class QuizCoach: ObservableObject {
         guard !again.isEmpty else { return }
         hush(); token = UUID()
         quiz = Quiz(title: full.title, questions: again.map { var q = $0; q.id = UUID(); return q })
-        marks = [:]; index = 0; retrying = true
+        marks = [:]; index = 0; retrying = true; insights = nil; reading = false
         ask()
     }
     func next() {
@@ -102,6 +106,25 @@ final class QuizCoach: ObservableObject {
             react(share >= 0.8 ? .proud : share >= 0.5 ? .happy : .unsure, for: 3)
             if share >= 0.8 { cheers += 1 }
             say(share == 1 ? "Every one. Your notes have this covered." : share >= 0.5 ? "\(score) out of \(count). Let's look at the ones that got away." : "\(score) out of \(count). A second look at these will help.")
+            readInsights()
+        }
+    }
+    /// Asks Halo what the answers show. Quietly leaves the card out if it can't.
+    private func readInsights() {
+        guard let quiz else { return }
+        let items = quiz.questions.map { q -> InsightsRequest.Item in
+            let mark = marks[q.id]
+            return .init(ask: q.ask, expected: q.isChoice ? q.options[q.answer] : q.expected, answer: mark?.answer ?? "",
+                         verdict: mark.map { $0.answer.isEmpty && !$0.right ? "skipped" : $0.verdict } ?? "skipped", source: q.source)
+        }
+        let request = InsightsRequest(title: quiz.title, items: items), id = token, server = server, demo = demo
+        reading = true
+        Task { [weak self] in
+            guard let self else { return }
+            let found: SessionInsights?
+            if demo { found = Self.demoInsights(items) } else { found = try? await client.insights(request, server: server) }
+            guard token == id else { return }
+            insights = found.flatMap { $0.isEmpty ? nil : $0 }; reading = false
         }
     }
     func pick(_ option: Int) {
@@ -207,6 +230,11 @@ final class QuizCoach: ObservableObject {
                          explain: "Bring the three down and reduce the power by one.", source: "power rule: xⁿ → n·xⁿ⁻¹"),
         ])
     }
+    private static func demoInsights(_ items: [InsightsRequest.Item]) -> SessionInsights {
+        SessionInsights(
+            strengths: items.filter { $0.verdict == "right" }.prefix(2).map { .init(point: String(($0.source.isEmpty ? $0.ask : $0.source).prefix(40)), why: "You answered this one correctly.") },
+            weaknesses: items.filter { $0.verdict != "right" }.prefix(2).map { .init(point: String(($0.source.isEmpty ? $0.ask : $0.source).prefix(40)), next: "Reread this line of your notes, then try the question again.") })
+    }
     private static func demoGrade(_ question: QuizQuestion, _ answer: String) -> QuizGrade {
         answer.lowercased().contains("inside")
             ? QuizGrade(verdict: "right", say: "Finding the inside function first tells you what to differentiate second.")
@@ -236,6 +264,7 @@ struct QuizView: View {
         .overlay { ConfettiBurst(trigger: coach.cheers).allowsHitTesting(false) }
         .animation(.spring(duration: 0.35), value: coach.stage)
         .animation(.spring(duration: 0.35), value: coach.index)
+        .animation(.spring(duration: 0.35), value: coach.insights)
         .onDisappear { coach.close() }
     }
 
@@ -408,6 +437,10 @@ struct QuizView: View {
             Text("of \(total) right").hand(30).foregroundStyle(HaloStyle.ink)
         }
         .accessibilityElement(children: .combine)
+        if let insights = coach.insights { InsightsCard(insights: insights).transition(.opacity.combined(with: .move(edge: .bottom))) }
+        else if coach.reading {
+            HStack(spacing: 10) { HaloRing(size: 18, working: true); Text("finding your strengths and weak spots").hand(22).foregroundStyle(HaloStyle.ink) }
+        }
         VStack(spacing: 10) {
             ForEach(coach.quiz?.questions ?? []) { q in
                 let mark = coach.marks[q.id]
@@ -432,6 +465,75 @@ struct QuizView: View {
             }
             Button { coach.again() } label: { Label("New quiz", systemImage: "sparkles") }.buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: coach.missed.isEmpty))
             Button { coach.close(); store.closeQuiz() } label: { Label("Back to my notes", systemImage: "square.and.pencil") }.buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: false))
+        }
+    }
+}
+
+/// Strengths and weaknesses after a quiz or a lesson: what the answers showed they have, what to work on next,
+/// and the earlier weak spots they have now got.
+struct InsightsCard: View {
+    let insights: SessionInsights
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if !insights.improved.isEmpty {
+                section("Better than last time", color: HaloKit.leaf) {
+                    ForEach(insights.improved, id: \.self) { row(icon: "arrow.up.circle.fill", tint: HaloKit.leaf, title: $0, detail: nil) }
+                }
+            }
+            if !insights.strengths.isEmpty {
+                section("Strengths", color: HaloKit.leaf) {
+                    ForEach(insights.strengths, id: \.point) { row(icon: "checkmark.seal.fill", tint: HaloKit.leaf, title: $0.point, detail: $0.why) }
+                }
+            }
+            if !insights.weaknesses.isEmpty {
+                section("Work on", color: HaloKit.amber) {
+                    ForEach(insights.weaknesses, id: \.point) { row(icon: "scope", tint: HaloKit.amber, title: $0.point, detail: $0.next, arrow: true) }
+                }
+                Text("Halo will give these more care in your next quiz and lesson.").hand(21).foregroundStyle(HaloStyle.ink)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .haloCard(padding: 20)
+    }
+    private func section<Rows: View>(_ title: String, color: Color, @ViewBuilder rows: () -> Rows) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Eyebrow(title, color: color)
+            rows()
+        }
+    }
+    private func row(icon: String, tint: Color, title: String, detail: String?, arrow: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Image(systemName: icon).font(.system(size: 16, weight: .semibold)).foregroundStyle(tint).frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title.prefix(1).uppercased() + title.dropFirst()).font(HaloKit.title(18, .medium)).foregroundStyle(HaloStyle.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail, !detail.isEmpty {
+                    Text(arrow ? "→ \(detail)" : detail).font(HaloKit.text(15)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// `--insights`: the card with sample content on the desk.
+    struct Sheet: View {
+        var body: some View {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("4").font(HaloKit.title(64, .semibold).monospacedDigit()).foregroundStyle(HaloStyle.text)
+                        Text("of 6 right").hand(30).foregroundStyle(HaloStyle.ink)
+                    }
+                    InsightsCard(insights: SessionInsights(
+                        strengths: [.init(point: "basic power rule application", why: "You brought the 3 down and dropped the power by one."),
+                                    .init(point: "spotting the inside function", why: "You asked what's inside before differentiating.")],
+                        weaknesses: [.init(point: "multiplying by the inside derivative", next: "Circle the inner function and find its derivative before you start."),
+                                     .init(point: "product rule vs chain rule", next: "Ask first: is it f(g(x)) or f times g?")],
+                        improved: ["role of the inside derivative"]))
+                }
+                .frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity).padding(24)
+            }
+            .background(DeskPaper().ignoresSafeArea())
         }
     }
 }

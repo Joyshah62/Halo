@@ -201,6 +201,12 @@ The server exposes `POST /api/lesson/start` with `{ title, chapter, pages: [{ pa
 | `AWS_S3_PREFIX` / `AWS_S3_PUBLIC_URL` | — | optional key prefix; CDN base URL instead of the S3 URL |
 | `MONGODB_URI` | — | Atlas connection string; records go to `MONGODB_DB` (`halo`) / `MONGODB_COLLECTION` (`files`) |
 
+## Strengths and weaknesses (`POST /api/insights`)
+
+After a quiz on your notes and after a chapter lesson, the iPad shows what the answers showed: up to three **strengths** (with what in the answer showed it), up to three things to **work on** (each with a next step), and earlier weak spots the student has now got (**better than last time**). The quiz calls `POST /api/insights` with `{ title, items: [{ ask, expected, answer, verdict, source }], learnerId }`; the lesson writes its own in the send-off it already generates (`summary.insights`).
+
+Weak spots are saved to the learner's memory (the "Gaps" section the *Why am I stuck?* agent reads) and strengths to its topics; improved ones are removed. Later quizzes, flash cards and lessons for the same device get the weak spots in their prompt and give them more care. Simulator: `--insights` shows the card with sample content.
+
 ## Deploy to Render
 
 [`render.yaml`](render.yaml) is a Render Blueprint for the server. Push to GitHub, then Render → **New → Blueprint** → pick this repo, and paste the secrets it asks for (Gemini, ElevenLabs, AWS, MongoDB). It runs `npm ci` / `npm start` in `server/` on Node 24, checks `/api/health`, and redeploys on every push that touches `server/`, `shared/` or `render.yaml`.

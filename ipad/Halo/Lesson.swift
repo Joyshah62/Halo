@@ -380,7 +380,9 @@ final class LessonCoach: ObservableObject {
                         if right || skipped {
                             if n >= demoNames.count {
                                 let got = demoNames.enumerated().filter { grades[$0.offset + 1]?.verdict == "got_it" }.map(\.element)
-                                try await receive(.finish(LessonSummary(say: "That's our three-stop sample. Your notes show what clicked and what to revisit.", nailed: got, revisit: demoNames.filter { !got.contains($0) }.map { "\($0): try one more example" }, takeaway: "Outside derivative × inside derivative. Keep both rates of change.", mastery: grades.values.map { LessonMastery(n: $0.n, verdict: $0.verdict) })))
+                                try await receive(.finish(LessonSummary(say: "That's our three-stop sample. Your notes show what clicked and what to revisit.", nailed: got, revisit: demoNames.filter { !got.contains($0) }.map { "\($0): try one more example" }, takeaway: "Outside derivative × inside derivative. Keep both rates of change.", mastery: grades.values.map { LessonMastery(n: $0.n, verdict: $0.verdict) },
+                                    insights: SessionInsights(strengths: got.prefix(2).map { .init(point: $0, why: "You explained it in your own words on the first check.") },
+                                                              weaknesses: demoNames.filter { !got.contains($0) }.prefix(2).map { .init(point: $0, next: "Work one more example before your next lesson.") }))))
                             } else { try await openDemo(n + 1) }
                         } else {
                             demoAttempts += 1
@@ -955,6 +957,9 @@ struct LessonBoard: View {
                         }.buttonStyle(.plain).arrives(concept.n + 1)
                     }
                 }.haloCard(padding: 20)
+                if let insights = summary.insights, !insights.isEmpty {
+                    InsightsCard(insights: insights).arrives(concepts.count + 2)
+                }
                 if !summary.takeaway.isEmpty {
                     Sticky(label: "The one thing to remember", tilt: -1) { Text(summary.takeaway).hand(31).fixedSize(horizontal: false, vertical: true) }
                         .frame(maxWidth: 560).arrives(concepts.count + 2)

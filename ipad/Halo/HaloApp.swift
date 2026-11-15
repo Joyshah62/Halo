@@ -21,7 +21,9 @@ struct HaloApp: App {
         WindowGroup {
             // `--avatars`: a sheet of every mood of the character, for looking at it.
             if let scene = scenePreview { Explorer3DLibrary(store: store, first: scene.model).preferredColorScheme(.light) }
-            else if CommandLine.arguments.contains("--avatars") { AvatarSheet().preferredColorScheme(.light) } else {
+            else if CommandLine.arguments.contains("--avatars") { AvatarSheet().preferredColorScheme(.light) }
+            // `--insights`: the strengths and weaknesses card with sample content, for looking at it.
+            else if CommandLine.arguments.contains("--insights") { InsightsCard.Sheet().preferredColorScheme(.light) } else {
             LibraryView(store: store)
                 .tint(HaloStyle.ink)
                 // Halo is ink on paper. Dark Mode would put white text on the light page.

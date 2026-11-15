@@ -19,7 +19,8 @@
 //        graph until the next interrupt (or the end), so the lesson survives between requests.
 // grade  Judges the answer against what a right answer contains; re-explains differently after a miss, answers
 //        the student's own question if that is what came back, then puts a smaller question to them.
-// wrap   Writes the summary: what they nailed, what to revisit, the one thing to remember.
+// wrap   Writes the summary: what they nailed, what to revisit, the one thing to remember, and their strengths and
+//        weaknesses (saved to their memory; insights.js has the rules).
 import { StateGraph, Annotation, START, END, interrupt, Command } from "@langchain/langgraph";
 import { randomUUID } from "node:crypto";
 import { lessonSaver, cachedLessonReply, saveLessonReply } from "./lesson-store.js";
@@ -29,7 +30,8 @@ import { describeLearner } from "./prompt.js";
 import { StepQueue, readLines, despeak } from "./steps.js";
 import * as db from "./db.js";
 import { startMaterial } from "./lesson-material.js";
-import { learnerKey, recordTopics, coveredTopics } from "./learner-memory.js";
+import { learnerKey, recordTopics, coveredTopics, recordInsights } from "./learner-memory.js";
+import { INSIGHTS_RULES, cleanInsights, withWeakSpots } from "./insights.js";
 
 const isMock = () => process.env.HALO_MOCK === "1";
 const clip = (value, n) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -465,20 +467,27 @@ Reply with JSON only:
 {"say": "<spoken, 2 or 3 short sentences, at most 45 words: specific to what THEY did today, warm, honest about what to revisit, no 'Great job', no 'Congratulations'>",
  "nailed": ["<concept names they clearly got>"],
  "revisit": ["<concept names worth another look, with a 3 to 8 word reason after a colon>"],
- "takeaway": "<the one sentence from this chapter to remember, at most 110 characters, plain words, no LaTeX>"}`;
+ "takeaway": "<the one sentence from this chapter to remember, at most 110 characters, plain words, no LaTeX>",
+ "strengths": [{"point": "...", "why": "..."}], "weaknesses": [{"point": "...", "next": "..."}], "improved": ["..."]}
+For strengths, weaknesses and improved, a "got it" check counts as right; "almost", "missed", "skipped" and "not reached" do not (a concept not reached is not a weakness).
+${INSIGHTS_RULES}`;
 
 async function wrap(state, config) {
   const emit = emitter(config);
   const { plan, transcript, mastery } = state;
+  const earlier = Array.isArray(state.learner?.weaknesses) ? state.learner.weaknesses : [];
   const got = mastery.filter((m) => m.verdict === "got_it").map((m) => plan.concepts[m.n - 1]?.name).filter(Boolean);
   const shaky = plan.concepts.filter((c) => !got.includes(c.name)).map((c) => c.name);
   let raw;
   if (isMock()) {
     raw = { say: `That's the chapter. ${got.length ? `You showed you understand ${got.join(" and ")}.` : "We have a starting point for your next practice."}${shaky.length ? ` Give ${shaky[0]} another look.` : " Keep those connections in mind."}`,
-      nailed: got, revisit: shaky.map((s) => `${s}: try one more example`), takeaway: "Outside derivative times inside derivative. Always ask: what's inside?" };
+      nailed: got, revisit: shaky.map((s) => `${s}: try one more example`), takeaway: "Outside derivative times inside derivative. Always ask: what's inside?",
+      strengths: got.slice(0, 3).map((name) => ({ point: name, why: "You answered the check on this one correctly." })),
+      weaknesses: plan.concepts.filter((c) => mastery.some((m) => m.n === c.n && m.verdict !== "got_it")).slice(0, 3).map((c) => ({ point: c.name, next: "Try one more example of this before moving on." })) };
   } else {
     raw = await generateJSON({ system: WRAP_SYSTEM, text: [
       describeLearner(state.learner),
+      `Earlier weak spots: ${earlier.length ? earlier.join("; ") : "none"}`,
       `Lesson "${plan.title}" (${state.title}${state.chapter ? `, ${state.chapter}` : ""}). Thread: ${plan.thread}`,
       `Roadmap and how each check went:\n${plan.concepts.map((c) => { const t = transcript.filter((x) => x.n === c.n); return `${c.n}. ${c.name} — ${t.length ? t.map((x) => `asked "${x.ask}" → "${clip(x.answer, 120) || "(skipped)"}" (${x.verdict.replace("_", " ")})`).join("; ") : "not reached"}`; }).join("\n")}`,
       "Write the send-off as JSON.",
@@ -497,6 +506,10 @@ async function wrap(state, config) {
     mastery: plan.concepts.map((c) => mastery.find((m) => m.n === c.n) || { n: c.n, verdict: "not_reached" }),
   };
   if (!summary.nailed.length && got.length) summary.nailed = got;
+  // Strengths only when a check was got right, weaknesses only when one wasn't (cleanInsights drops the rest).
+  const checked = mastery.map((m) => ({ verdict: m.verdict === "got_it" ? "right" : m.verdict === "skipped" ? "skipped" : "wrong" }));
+  summary.insights = cleanInsights(raw, { earlier, items: checked.length ? checked : [{ verdict: "skipped" }] });
+  recordInsights(learnerKey(state.learnerId), { how: "lesson", title: plan.title, ...summary.insights });
   emit("finish", summary);
   console.log(`[lesson] ${state.id.slice(0, 8)} done: ${got.length} nailed, ${shaky.length} to revisit — ${say.slice(0, 70)}`);
   return { summary };
@@ -540,7 +553,7 @@ async function run(id, input, send) {
 
 /**
  * Starts a lesson over a chapter and streams it until Halo asks its first question.
- * @param {{ title: string, chapter: string, pages: { page: number, text: string }[], learner?: object }} input
+ * @param {{ title: string, chapter: string, pages: { page: number, text: string }[], learner?: object, learnerId?: string }} input
  * @param {(event: string, data: object) => void} send
  * @returns {Promise<{ id: string, waiting: boolean }>}
  */
@@ -550,7 +563,8 @@ export async function startLesson(input, send) {
   if (pages.some((p) => !Number.isInteger(p.page) || p.page < 1) || new Set(pages.map((p) => p.page)).size !== pages.length) throw new Error("Chapter page numbers must be unique positive integers.");
   if (!pages.some((p) => p.text.trim())) throw new Error("This chapter has no readable text. Choose a PDF with a text layer.");
   pages.sort((a, b) => a.page - b.page);
-  input = { ...input, pages };
+  // Weak spots from earlier quizzes and lessons travel with the learner, so every step can give them more care.
+  input = { ...input, pages, learner: await withWeakSpots(input.learner, input.learnerId) };
   const id = randomUUID();
   return run(id, { ...input, id }, send);
 }

@@ -16,6 +16,7 @@ import { cleanStep, despeak, prepareStep } from "./steps.js";
 import { catalog as scenes, cleanExplorer } from "../shared/scene3d/schema.js";
 import { startLesson, continueLesson } from "./lesson.js";
 import { installNotesQuiz } from "./notes-quiz.js";
+import { installInsights } from "./insights.js";
 import { storeFile, tryStoreFile, listFiles, storageEnabled, StorageError, MAX_FILE_BYTES } from "./storage.js";
 
 const PORT = Number(process.env.PORT || 8787);
@@ -524,6 +525,8 @@ app.post("/api/notes/refine", async (req, res) => {
 
 // Quiz me on my notes, mark a short answer, ask about my notes (notes-quiz.js).
 installNotesQuiz(app);
+// Strengths and weaknesses after a quiz, saved to the learner's memory (insights.js).
+installInsights(app);
 // POST /api/notes/image → { image: { mime, data (base64), url? } | null }: one diagram for a section of enhanced notes.
 // url is the image's public S3 link when storage is on.
 app.post("/api/notes/image", async (req, res) => {

@@ -17,6 +17,18 @@ final class HaloCoreChecks {
         let old = try JSONDecoder().decode(NotebookEntry.self, from: Data(#"{"id":"\#(UUID().uuidString)","title":"","text":"hi","pageIndex":0,"createdAt":0,"updatedAt":0}"#.utf8))
         try expectNil(old.flashcards)
     }
+    func testInsightsDecode() throws {
+        let json = #"{"strengths":[{"point":"power rule","why":"You brought the 3 down."}],"weaknesses":[{"point":"derivative of the inside","next":"Write outside' × inside' first."}],"improved":["product vs chain"]}"#
+        let insights = try JSONDecoder().decode(SessionInsights.self, from: Data(json.utf8))
+        try expectEqual(insights.strengths.first?.point, "power rule"); try expectEqual(insights.weaknesses.first?.next, "Write outside' × inside' first.")
+        try expectEqual(insights.improved, ["product vs chain"])
+        // Missing lists are empty, not an error.
+        try expectEqual(try JSONDecoder().decode(SessionInsights.self, from: Data("{}".utf8)).isEmpty, true)
+        // A lesson summary from a server without insights still decodes; one with them carries them.
+        let base = #""say":"Done.","nailed":["a"],"revisit":[],"takeaway":"t","mastery":[{"n":1,"verdict":"got_it"}]"#
+        try expectNil(try JSONDecoder().decode(LessonSummary.self, from: Data("{\(base)}".utf8)).insights)
+        try expectEqual(try JSONDecoder().decode(LessonSummary.self, from: Data("{\(base),\"insights\":\(json)}".utf8)).insights, insights)
+    }
     func testScene3DStreamingAndPersistence() throws {
         let json = #"{"index":0,"say":"Follow the axon.","ink":[{"type":"scene3d","model":"neuron","focus":"axon","caption":"Toward the terminals."}]}"#
         let step = try JSONDecoder().decode(AnswerStep.self, from: Data(json.utf8))
@@ -179,6 +191,7 @@ private func expectThrows<T>(_ expression: @autoclosure () throws -> T) throws {
     static func run() async throws {
         let checks = HaloCoreChecks()
         try checks.testFlashcardsDecodeSaveAndStaleness(); print("PASS: flash cards decoding, saving with the note, and staleness")
+        try checks.testInsightsDecode(); print("PASS: strengths and weaknesses decoding, with and without a lesson's insights")
         try checks.testScene3DStreamingAndPersistence(); print("PASS: 3D scene decoding, persistence and legacy compatibility")
         try checks.testReverseCropAndClamping(); print("PASS: normalized crop geometry")
         try checks.testDocumentQuestionsAndSampling(); print("PASS: whole-document questions and sampling")

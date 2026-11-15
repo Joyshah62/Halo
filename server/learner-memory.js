@@ -208,6 +208,52 @@ export function recordTopics(key, items) {
   });
 }
 
+/**
+ * Saves what a quiz or lesson showed: weaknesses become gap lines (the same section the "Why am I stuck?" agent
+ * reads and writes), strengths become topic lines, and weak spots the student has now got are taken off.
+ * Runs in the background; never throws.
+ * @param {string} key  from learnerKey()
+ * @param {{ how: "quiz" | "lesson", title?: string, strengths?: { point: string }[], weaknesses?: { point: string }[], improved?: string[] }} insight
+ */
+export function recordInsights(key, { how, title, strengths = [], weaknesses = [], improved = [] }) {
+  const source = how === "lesson" ? "lesson" : "quiz";
+  const topic = clip(title, 60).toLowerCase() || source;
+  const weak = weaknesses.map((w) => clip(w?.point, 60).toLowerCase()).filter(Boolean);
+  const strong = strengths.map((s) => clip(s?.point, 60).toLowerCase()).filter(Boolean);
+  const fixed = new Set(improved.map((g) => clip(g, 60).toLowerCase()).filter(Boolean));
+  if (!weak.length && !strong.length && !fixed.size) return Promise.resolve();
+  return enqueue(key, async () => {
+    if (!ids.has(key)) await fromBackboard(key);
+    const before = parse(readLocal(key));
+    const after = { gaps: new Map(before.gaps), topics: new Map(before.topics) };
+    const today = new Date().toISOString().slice(0, 10);
+    for (const gap of fixed) after.gaps.delete(gap);
+    for (const gap of weak) {
+      const old = after.gaps.get(gap);
+      const times = (old ? Number(old.match(/seen (\d+) time/)?.[1]) || 1 : 0) + 1;
+      after.gaps.delete(gap);   // re-inserted at the end: newest weak spots last
+      after.gaps.set(gap, `- ${gap} | ${topic} | seen ${times} time(s) | ${source}`);
+    }
+    for (const point of strong) {
+      const k = `${source}:${point}`, old = after.topics.get(k);
+      const times = (old ? Number(fields(old).at(-1)?.match(/(\d+)/)?.[1]) || 1 : 0) + 1;
+      after.topics.delete(k);
+      after.topics.set(k, `- ${point} | ${source} | strength | ${topic} | ${today} | ${times} time(s)`);
+    }
+    while (after.topics.size > MAX_TOPICS) after.topics.delete(after.topics.keys().next().value);
+    while (after.gaps.size > MAX_TOPICS) after.gaps.delete(after.gaps.keys().next().value);
+    writeLocal(key, after);
+    console.log(`[memory] ${source} "${topic}": ${strong.length} strength(s), ${weak.length} weak spot(s), ${fixed.size} improved`);
+    await toBackboard(key, before, after);
+  });
+}
+
+/** The learner's weak spots, newest first (gap names only), for prompts. */
+export async function weakSpots(key, limit = 8) {
+  const { markdown } = await pullMemory(key);
+  return [...parse(markdown).gaps.keys()].reverse().slice(0, limit);
+}
+
 /** The topics section as plain lines, for prompts that only need to know what was covered. */
 export async function coveredTopics(key) {
   const { markdown } = await pullMemory(key);

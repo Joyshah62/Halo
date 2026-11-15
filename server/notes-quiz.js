@@ -1,7 +1,8 @@
 // Halo in the student's notebook: a quiz written from their own notes, marking for its short answers,
 // and plain questions about the notes.
 //
-//   POST /api/notes/quiz   { notes: [{ title, text }], image?, document?, learner? }
+//   POST /api/notes/quiz   { notes: [{ title, text }], image?, document?, learner?, learnerId? }
+//                          (learnerId: the learner's saved weak spots get more care in the questions)
 //                          → { title, questions: [{ kind, ask, options, answer, expected, explain, source, audio }] }
 //   POST /api/notes/grade  { ask, expected, source?, answer }  → { verdict: "right"|"almost"|"wrong", say, audio }
 //   POST /api/notes/ask    { question, notes: [{ title, text }], document?, learner? }  → { say, audio }
@@ -13,6 +14,7 @@ import { generateJSON } from "./llm.js";
 import { speak } from "./tts.js";
 import { despeak } from "./steps.js";
 import { plain } from "./lesson.js";
+import { withWeakSpots } from "./insights.js";
 import { FLASHCARDS_SYSTEM, buildFlashcardsText, QUIZ_SYSTEM, buildQuizText, QUIZ_GRADE_SYSTEM, buildQuizGradeText, NOTES_ASK_SYSTEM, buildNotesAskText } from "./prompt.js";
 
 const isMock = () => process.env.HALO_MOCK === "1";
@@ -130,7 +132,7 @@ export function installNotesQuiz(app) {
     try {
       const count = questionCount(notes, images.length > 0);
       const raw = isMock() ? mockQuiz(notes) : await generateJSON({ images, system: QUIZ_SYSTEM,
-        text: buildQuizText({ notes, document: clip(b.document, 120), count, learner: b.learner, handwritten: images.length > 0 }) });
+        text: buildQuizText({ notes, document: clip(b.document, 120), count, learner: await withWeakSpots(b.learner, b.learnerId), handwritten: images.length > 0 }) });
       const quiz = cleanQuiz(raw);
       quiz.questions = await voiced(quiz.questions);
       console.log(`[quiz] "${quiz.title}" ${quiz.questions.length} questions (${quiz.questions.filter((q) => q.kind === "choice").length} choice) from ${notes.length} notes in ${Date.now() - t0}ms`);
@@ -150,7 +152,7 @@ export function installNotesQuiz(app) {
     try {
       const count = cardCount(notes, images.length > 0);
       const raw = isMock() ? mockFlashcards(notes) : await generateJSON({ images, system: FLASHCARDS_SYSTEM,
-        text: buildFlashcardsText({ notes, document: clip(b.document, 120), count, learner: b.learner, handwritten: images.length > 0 }) });
+        text: buildFlashcardsText({ notes, document: clip(b.document, 120), count, learner: await withWeakSpots(b.learner, b.learnerId), handwritten: images.length > 0 }) });
       const deck = cleanFlashcards(raw);
       console.log(`[flashcards] "${deck.title}" ${deck.cards.length} cards from ${notes.length} notes in ${Date.now() - t0}ms`);
       res.json(deck);
