@@ -131,6 +131,7 @@ export function matchReply(node, reply) {
 // Each lookup is one JSON file. The plan and the answer are in scope when they come from the demo document; the
 // videos, video moments, pictures and voice clips are in scope when they use words a recorded plan chose.
 const WEB_SCOPE = "web-scope.json";
+const notesKey = (body) => [(Array.isArray(body?.notes) ? body.notes : []).map((x) => `${norm(x?.title)}:${norm(x?.text)}`), typeof body?.image === "string" && body.image ? hash(body.image) : ""];
 const webKey = (kind, body) => {
   const n = (field, max = 4000) => norm(body?.[field]).slice(0, max);
   const parts = {
@@ -140,6 +141,11 @@ const webKey = (kind, body) => {
     moment: [String(body?.videoId || ""), n("question")],
     images: [n("wiki"), n("query"), n("question")],
     speak: [String(body?.text || "").trim()],
+    // Quizzes and flash cards are written from the student's notes: same notes (and same handwriting), same deck.
+    quiz: [n("document"), notesKey(body)],
+    flashcards: [n("document"), notesKey(body)],
+    grade: [n("ask"), n("expected"), n("answer")],
+    insights: [n("title"), (Array.isArray(body?.items) ? body.items : []).map((x) => [norm(x?.ask), norm(x?.answer), x?.verdict || ""])],
   }[kind];
   return `web-${kind}-${hash(parts)}.json`;
 };

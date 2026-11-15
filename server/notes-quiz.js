@@ -15,6 +15,7 @@ import { speak } from "./tts.js";
 import { despeak } from "./steps.js";
 import { plain } from "./lesson.js";
 import { withWeakSpots } from "./insights.js";
+import * as replay from "./replay.js";
 import { FLASHCARDS_SYSTEM, buildFlashcardsText, QUIZ_SYSTEM, buildQuizText, QUIZ_GRADE_SYSTEM, buildQuizGradeText, NOTES_ASK_SYSTEM, buildNotesAskText } from "./prompt.js";
 
 const isMock = () => process.env.HALO_MOCK === "1";
@@ -122,8 +123,29 @@ async function voiced(questions) {
   return questions.map((q, i) => ({ ...q, audio: audio[i] }));
 }
 
+// Quizzes and flash cards about the demo document are recorded once and replayed (replay.js), and so is the
+// marking of their answers: a quiz's questions are marked as in scope when it is recorded.
+const inScope = (b) => replay.inScope(b.document, ...(Array.isArray(b.notes) ? b.notes.map((x) => `${x?.title ?? ""} ${x?.text ?? ""}`) : []));
+function kept(kind, scoped, handler) {
+  return async (req, res) => {
+    const b = req.body ?? {};
+    if (!scoped(b)) return handler(req, res);
+    const recorded = replay.webCached(kind, b);
+    if (recorded) { console.log(`[${kind}] replayed`); return res.json(recorded); }
+    const json = res.json.bind(res);
+    res.json = (value) => {
+      if (res.statusCode < 400 && value && !value.error) {
+        replay.saveWeb(kind, b, value);
+        if (kind === "quiz") replay.allowWeb(...(value.questions || []).map((q) => q.ask));
+      }
+      return json(value);
+    };
+    return handler(req, res);
+  };
+}
+
 export function installNotesQuiz(app) {
-  app.post("/api/notes/quiz", async (req, res) => {
+  app.post("/api/notes/quiz", kept("quiz", inScope, async (req, res) => {
     const b = req.body ?? {};
     const notes = readNotes(b.notes);
     const images = typeof b.image === "string" && b.image ? [{ mime: "image/jpeg", data: b.image, label: "The student's handwritten notes:" }] : [];
@@ -141,9 +163,9 @@ export function installNotesQuiz(app) {
       console.error("[quiz] error", e);
       res.status(500).json({ error: e.message || String(e) });
     }
-  });
+  }));
 
-  app.post("/api/notes/flashcards", async (req, res) => {
+  app.post("/api/notes/flashcards", kept("flashcards", inScope, async (req, res) => {
     const b = req.body ?? {};
     const notes = readNotes(b.notes);
     const images = typeof b.image === "string" && b.image ? [{ mime: "image/jpeg", data: b.image, label: "The student's handwritten notes:" }] : [];
@@ -160,9 +182,9 @@ export function installNotesQuiz(app) {
       console.error("[flashcards] error", e);
       res.status(500).json({ error: e.message || String(e) });
     }
-  });
+  }));
 
-  app.post("/api/notes/grade", async (req, res) => {
+  app.post("/api/notes/grade", kept("grade", (b) => replay.webAllowed(b.ask), async (req, res) => {
     const b = req.body ?? {};
     const ask = clip(b.ask, 240), expected = clip(b.expected, 240), answer = clip(b.answer, 600);
     if (!ask || !expected) return res.status(400).json({ error: "ask and expected required" });
@@ -176,7 +198,7 @@ export function installNotesQuiz(app) {
       console.error("[quiz grade] error", e);
       res.status(500).json({ error: e.message || String(e) });
     }
-  });
+  }));
 
   app.post("/api/notes/ask", async (req, res) => {
     const b = req.body ?? {};

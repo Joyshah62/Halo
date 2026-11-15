@@ -5,6 +5,7 @@
 //                      → { strengths: [{ point, why }], weaknesses: [{ point, next }], improved: [string] }
 //
 // The lesson writes its own in wrap() (lesson.js), from the same rules, in the call that already writes its send-off.
+import * as replay from "./replay.js";
 import { generateJSON } from "./llm.js";
 import { learnerKey, recordInsights, weakSpots } from "./learner-memory.js";
 
@@ -74,10 +75,15 @@ export function installInsights(app) {
     const title = clip(b.title, 60);
     const who = learnerKey(b.learnerId);
     const t0 = Date.now();
-    const earlier = await Promise.race([weakSpots(who).catch(() => []), sleep(1500).then(() => [])]);
+    // The end of a recorded quiz about the demo document replays too (replay.js); memory is still updated.
+    const scoped = items.some((x) => replay.webAllowed(x.ask));
+    const recorded = scoped && replay.webCached("insights", b);
+    const earlier = recorded ? [] : await Promise.race([weakSpots(who).catch(() => []), sleep(1500).then(() => [])]);
     let insights;
+    let failed = false;
     try {
-      if (isMock()) insights = fallbackInsights(items);
+      if (recorded) insights = recorded;
+      else if (isMock()) insights = fallbackInsights(items);
       else {
         const raw = await generateJSON({ system: SYSTEM, text: [
           title && `Quiz: "${title}"`,
@@ -90,8 +96,9 @@ export function installInsights(app) {
       }
     } catch (e) {
       console.error("[insights] error, using the questions instead", e.message || e);
-      insights = fallbackInsights(items);
+      insights = fallbackInsights(items); failed = true;
     }
+    if (scoped && !recorded && !failed) replay.saveWeb("insights", b, insights);
     recordInsights(who, { how: "quiz", title, ...insights });
     console.log(`[insights] quiz "${title}": ${insights.strengths.length} strengths, ${insights.weaknesses.length} weaknesses, ${insights.improved.length} improved in ${Date.now() - t0}ms`);
     res.json(insights);
