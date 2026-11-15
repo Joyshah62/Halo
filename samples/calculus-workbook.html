@@ -1,0 +1,226 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>A Little Calculus</title>
+<!-- Source of "A Little Calculus.pdf". Build: see samples/README.md. h1 = chapter, h2 = section: Chrome turns them into the PDF outline, which Halo reads as chapters. -->
+<style>
+@page { size: 8.5in 11in; margin: 0 }
+* { box-sizing: border-box }
+html, body { margin: 0 }
+body { font-variant-ligatures: none; font-feature-settings: "liga" 0, "clig" 0, "dlig" 0; font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif; color: #2b2b33; background: #fbf8f2; -webkit-print-color-adjust: exact; print-color-adjust: exact }
+.page { width: 8.5in; height: 11in; padding: 0.6in 0.75in 0.55in; page-break-after: always; position: relative; background: #fbf8f2; overflow: hidden }
+.crumb { color: #e8743b; font-weight: 600; font-size: 9.5pt; letter-spacing: .08em }
+h1, h2 { font-family: "Iowan Old Style", Georgia, serif; font-weight: 400; color: #33333b; margin: 0 }
+h1 { font-size: 28pt; margin: .12in 0 .1in; letter-spacing: -.01em }
+h2 { font-size: 22pt; margin: .12in 0 .08in }
+.m { font-family: "Iowan Old Style", Georgia, serif; font-size: 1.08em; white-space: nowrap }
+.lead { font-size: 11.5pt; color: #55555f; line-height: 1.5; margin: 0 0 .2in; max-width: 6.6in }
+p { font-size: 11pt; line-height: 1.55; color: #44444c; margin: 0 0 .12in }
+.rule { background: #fff; border: 1.4px solid #f1c7ae; border-left: 6px solid #e8743b; border-radius: 10px; padding: .16in .22in; margin: .08in 0 .2in }
+.rule .label { font-size: 8.5pt; font-weight: 700; letter-spacing: .1em; color: #e8743b; margin-bottom: .05in }
+.rule .says { font-family: "Iowan Old Style", Georgia, serif; font-size: 15pt; line-height: 1.4; color: #2b2b33 }
+.rule .formula { font-family: "Iowan Old Style", "STIX Two Text", Georgia, serif; font-size: 17pt; margin-top: .06in; color: #2b2b33 }
+.small-rules { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .14in; margin: 0 0 .2in }
+.small-rules > div { background: #fff; border: 1.2px solid #e6e0d2; border-radius: 9px; padding: .1in .13in; font-size: 10.5pt; line-height: 1.45; color: #44444c }
+.small-rules b { display: block; font-size: 8.5pt; letter-spacing: .08em; color: #8a8478; margin-bottom: .03in }
+.small-rules .eg { font-family: "Iowan Old Style", Georgia, serif; font-size: 12.5pt; color: #2b2b33; margin-top: .04in }
+.example { background: #fffdf8; border: 1.2px dashed #d9d1bf; border-radius: 10px; padding: .14in .22in .1in; margin: 0 0 .2in }
+.example .label { font-size: 8.5pt; font-weight: 700; letter-spacing: .1em; color: #8a8478; margin-bottom: .06in }
+.step { display: grid; grid-template-columns: 1.7in 1fr; gap: .15in; align-items: baseline; padding: .05in 0; border-top: 1px solid #eee7d8 }
+.step:first-of-type { border-top: 0 }
+.step .what { font-size: 10pt; color: #8a8478 }
+.step .line { font-family: "Iowan Old Style", Georgia, serif; font-size: 14.5pt; color: #2b2b33 }
+.watch { background: #fdf0e8; border-radius: 10px; padding: .13in .2in; margin: 0 0 .18in; font-size: 10.8pt; line-height: 1.5; color: #5a3b2a }
+.watch b { color: #c4521f }
+table.pairs { width: 100%; border-collapse: collapse; margin: .04in 0 .2in; background: #fff; border-radius: 10px; overflow: hidden; border: 1.2px solid #e6e0d2 }
+.pairs th { text-align: left; font-size: 8.5pt; letter-spacing: .1em; color: #8a8478; font-weight: 700; padding: .09in .16in; background: #f6f1e6 }
+.pairs td { font-family: "Iowan Old Style", Georgia, serif; font-size: 14pt; padding: .08in .16in; border-top: 1px solid #eee7d8; color: #2b2b33 }
+.problem { border-top: 1.2px solid #e1dccf; padding-top: .14in; position: relative }
+.problem.tall { height: 2.78in } .problem.short { height: 1.62in }
+.num { position: absolute; left: 0; top: .14in; font-family: "Iowan Old Style", Georgia, serif; font-size: 15pt; color: #e8743b }
+.ask { margin-left: .42in; font-size: 11pt; color: #5c5c66 }
+.math { margin: .06in 0 0 .42in; font-family: "Iowan Old Style", Georgia, serif; font-size: 21pt; color: #2b2b33 }
+.work { position: absolute; left: .42in; right: 0; top: .98in; bottom: .1in;
+  background-image: radial-gradient(#d6cfbf 1px, transparent 1.2px); background-size: .25in .25in; background-position: .1in .1in }
+.problem.short .work { top: .9in }
+.foot { position: absolute; left: .75in; right: .75in; bottom: .3in; font-size: 8.5pt; color: #a29d92; display: flex; justify-content: space-between }
+.cover { padding-top: 1.1in }
+.cover .ring { width: 1.05in; height: 1.05in; border-radius: 50%; border: 9px solid #e8743b; margin-bottom: .45in }
+.cover .title { font-family: "Iowan Old Style", Georgia, serif; color: #33333b; font-size: 46pt; margin: .1in 0 .14in; letter-spacing: -.02em }
+.cover-unused { font-size: 46pt; margin: .1in 0 .14in; letter-spacing: -.02em }
+.cover .lead { font-size: 14pt; max-width: 5.6in }
+.how { margin-top: .4in; padding: .2in .28in; border-radius: 12px; max-width: 6.2in; background: #fff; border: 1.2px solid #e6e0d2 }
+.how .label { font-size: 8.5pt; font-weight: 700; letter-spacing: .1em; color: #e8743b; margin-bottom: .08in }
+.how ol { margin: 0; padding-left: .22in; font-size: 11.5pt; line-height: 1.75; color: #44444c }
+.contents { margin-top: .4in; max-width: 6.2in }
+.contents div { display: flex; justify-content: space-between; font-size: 12pt; padding: .07in 0; border-bottom: 1px dotted #d6cfbf; color: #44444c }
+.contents span:first-child b { font-family: "Iowan Old Style", Georgia, serif; font-weight: 400; color: #e8743b; display: inline-block; width: .32in }
+.key { display: grid; grid-template-columns: 1fr 1fr; gap: .06in .5in; margin-top: .15in }
+.key div:not(.sub) { font-family: "Iowan Old Style", Georgia, serif; font-size: 13.5pt; padding: .08in 0; border-bottom: 1px dotted #d6cfbf }
+.key span { color: #e8743b; display: inline-block; width: .55in; font-size: 11pt }
+.key .sub { font-family: "Avenir Next", sans-serif; border: 0; padding: 0; grid-column: 1 / -1; font-size: 8.5pt; letter-spacing: .1em; color: #8a8478; margin: .16in 0 0 }
+.key-unused { grid-column: 1 / -1; font-size: 8.5pt; letter-spacing: .1em; color: #8a8478; margin: .16in 0 0; font-family: "Avenir Next", sans-serif }
+</style></head><body>
+
+<!-- Cover -->
+<div class="page cover">
+  <div class="ring"></div>
+  <div class="crumb">HALO · WORKBOOK</div>
+  <div class="title">A Little Calculus</div>
+  <p class="lead">Derivatives from the ground up: functions inside functions, the power rule, the chain rule, and what a slope can tell you. Short lessons, then problems to work by hand.</p>
+  <div class="how"><div class="label">HOW TO USE THIS WORKBOOK</div><ol>
+    <li>Read the lesson page. The orange box is the rule to remember.</li>
+    <li>Work each problem by hand in the dotted space, one step per line.</li>
+    <li>Pause after a line and Halo checks it. A wrong line gets circled.</li>
+    <li>Stuck? Ask Halo <b>“Why am I stuck?”</b> It finds the idea you are missing and the page of this book that teaches it.</li>
+  </ol></div>
+  <div class="contents">
+    <div><span><b>1</b>Inside and outside functions</span><span>2</span></div>
+    <div><span><b>2</b>The power rule</span><span>3</span></div>
+    <div><span><b>3</b>The chain rule</span><span>5</span></div>
+    <div><span><b>4</b>Slopes and turning points</span><span>7</span></div>
+    <div><span><b>&nbsp;</b>Answers</span><span>9</span></div>
+  </div>
+  <div class="foot"><span>A Little Calculus</span><span>1</span></div>
+</div>
+
+<!-- 1 · Inside and outside functions -->
+<div class="page">
+  <div class="crumb">CHAPTER 1</div>
+  <h1>Inside and outside functions</h1>
+  <p class="lead">Many functions are one function placed inside another. Before you can differentiate them, you need to see which part is which.</p>
+  <div class="rule"><div class="label">THE IDEA</div>
+    <div class="says">The inside function is the part you would work out first. The outside function is what you do to it afterwards.</div></div>
+  <p>Take <span class="m">y = (x² + 1)³</span> as an example: to find y for a number x, you first work out <span class="m">x² + 1</span>, then cube the result. So <span class="m">x² + 1</span> is the inside function and cubing is the outside function. A quick test: cover the brackets with your thumb. What your thumb hides is the inside; what is left showing is the outside.</p>
+  <table class="pairs">
+    <tr><th>FUNCTION</th><th>INSIDE</th><th>OUTSIDE</th></tr>
+    <tr><td>y = (x² + 1)³</td><td>x² + 1</td><td>( )³</td></tr>
+    <tr><td>y = (3x − 2)⁴</td><td>3x − 2</td><td>( )⁴</td></tr>
+    <tr><td>y = √(x + 5)</td><td>x + 5</td><td>√( )</td></tr>
+  </table>
+  <div class="watch"><b>Why it matters.</b> When you differentiate a function inside a function (Chapter 3), the inside changes too, and that change has to be counted. You can only count it if you have spotted the inside function first.</div>
+  <div class="problem short"><div class="num">1.</div><div class="ask">Name the inside function and the outside function.</div><div class="math">y = (5x + 2)³</div><div class="work"></div></div>
+  <div class="problem short"><div class="num">2.</div><div class="ask">Name the inside function and the outside function.</div><div class="math">y = (x³ − 4)²</div><div class="work"></div></div>
+  <div class="foot"><span>A Little Calculus</span><span>2</span></div>
+</div>
+
+<!-- 2 · The power rule: lesson -->
+<div class="page">
+  <div class="crumb">CHAPTER 2</div>
+  <h1>The power rule</h1>
+  <p class="lead">The derivative dy/dx tells you how fast y changes as x changes. On a graph, it is the slope of the curve. For powers of x there is one rule that does almost all the work.</p>
+  <div class="rule"><div class="label">THE POWER RULE</div>
+    <div class="says">Bring the power down in front, then lower the power by one.</div>
+    <div class="formula">If y = xⁿ, then dy/dx = n·xⁿ⁻¹</div></div>
+  <div class="small-rules">
+    <div><b>NUMBERS IN FRONT</b>A number multiplying x stays in front.<div class="eg">5x³ → 15x²</div></div>
+    <div><b>ONE TERM AT A TIME</b>Differentiate a sum one term at a time.<div class="eg">x² + x → 2x + 1</div></div>
+    <div><b>PLAIN NUMBERS</b>The derivative of a constant number is 0.<div class="eg">7 → 0</div></div>
+  </div>
+  <div class="example"><div class="label">WORKED EXAMPLE · y = 4x³ − 5x + 2</div>
+    <div class="step"><span class="what">First term: power rule</span><span class="line">4x³ → 4 · 3x² = 12x²</span></div>
+    <div class="step"><span class="what">Second term: x is x¹</span><span class="line">−5x → −5</span></div>
+    <div class="step"><span class="what">Plain number</span><span class="line">+2 → 0</span></div>
+    <div class="step"><span class="what">Put it together</span><span class="line">dy/dx = 12x² − 5</span></div>
+  </div>
+  <div class="watch"><b>Watch out.</b> Lower the power by exactly one: <span class="m">x⁴</span> becomes <span class="m">4x³</span>, not <span class="m">4x⁴</span> and not <span class="m">4x²</span>. And x on its own has power one, so its derivative is 1.</div>
+  <div class="foot"><span>A Little Calculus</span><span>3</span></div>
+</div>
+
+<!-- 2 · The power rule: practice -->
+<div class="page">
+  <div class="crumb">CHAPTER 2 · PRACTICE</div>
+  <h2>Practice: the power rule</h2>
+  <p class="lead">Write one step per line. Finish with dy/dx = … on the last line.</p>
+  <div class="problem tall"><div class="num">3.</div><div class="ask">Find dy/dx.</div><div class="math">y = x⁵</div><div class="work"></div></div>
+  <div class="problem tall"><div class="num">4.</div><div class="ask">Find dy/dx.</div><div class="math">y = 3x⁴ − 2x</div><div class="work"></div></div>
+  <div class="problem tall"><div class="num">5.</div><div class="ask">Find dy/dx.</div><div class="math">y = x³ − 6x² + 9x + 1</div><div class="work"></div></div>
+  <div class="foot"><span>A Little Calculus</span><span>4</span></div>
+</div>
+
+<!-- 3 · The chain rule: lesson -->
+<div class="page">
+  <div class="crumb">CHAPTER 3</div>
+  <h1>The chain rule</h1>
+  <p class="lead">Use the chain rule when one function sits inside another, like <span class="m">(x² + 1)³</span> or <span class="m">√(x + 5)</span>. Start by naming the inside and outside functions, as in Chapter 1.</p>
+  <div class="rule"><div class="label">THE CHAIN RULE</div>
+    <div class="says">Differentiate the outside, keeping the inside as it is. Then multiply by the derivative of the inside.</div>
+    <div class="formula">dy/dx = (derivative of outside) × (derivative of inside)</div></div>
+  <div class="example"><div class="label">WORKED EXAMPLE · y = (x³ + 2)⁴</div>
+    <div class="step"><span class="what">Name the parts</span><span class="line">inside: x³ + 2 &nbsp;·&nbsp; outside: ( )⁴</span></div>
+    <div class="step"><span class="what">Outside, inside kept</span><span class="line">4(x³ + 2)³</span></div>
+    <div class="step"><span class="what">Derivative of inside</span><span class="line">3x²</span></div>
+    <div class="step"><span class="what">Multiply them</span><span class="line">dy/dx = 4(x³ + 2)³ · 3x²</span></div>
+    <div class="step"><span class="what">Tidy up</span><span class="line">dy/dx = 12x²(x³ + 2)³</span></div>
+  </div>
+  <div class="watch"><b>The most common slip:</b> stopping after the outside. Using the power rule on the brackets is only half the job. The inside is changing too, so you must multiply by the derivative of the inside.</div>
+  <p>Check yourself: if the inside is just x, its derivative is 1 and the chain rule changes nothing. That is why the plain power rule works for <span class="m">x⁵</span> on its own, while <span class="m">(3x − 2)⁵</span> needs the extra factor.</p>
+  <div class="foot"><span>A Little Calculus</span><span>5</span></div>
+</div>
+
+<!-- 3 · The chain rule: practice -->
+<div class="page">
+  <div class="crumb">CHAPTER 3 · PRACTICE</div>
+  <h2>Practice: the chain rule</h2>
+  <p class="lead">Name the inside first. Then outside, times the derivative of the inside.</p>
+  <div class="problem tall"><div class="num">6.</div><div class="ask">Find dy/dx.</div><div class="math">y = (x² + 1)³</div><div class="work"></div></div>
+  <div class="problem tall"><div class="num">7.</div><div class="ask">Find dy/dx.</div><div class="math">y = (3x − 2)⁴</div><div class="work"></div></div>
+  <div class="problem tall"><div class="num">8.</div><div class="ask">Find dy/dx. Simplify your answer.</div><div class="math">y = (2x + 5)⁵</div><div class="work"></div></div>
+  <div class="foot"><span>A Little Calculus</span><span>6</span></div>
+</div>
+
+<!-- 4 · Slopes and turning points: lesson -->
+<div class="page">
+  <div class="crumb">CHAPTER 4</div>
+  <h1>Slopes and turning points</h1>
+  <p class="lead">A derivative is a slope you can calculate. Put a number in for x and you get the steepness of the curve at that point.</p>
+  <div class="rule"><div class="label">SLOPE AT A POINT</div>
+    <div class="says">To find the slope at a point, work out dy/dx, then substitute the x value of that point.</div></div>
+  <div class="rule"><div class="label">TURNING POINTS</div>
+    <div class="says">At a turning point the curve is flat, so the slope is zero: set dy/dx = 0 and solve for x.</div></div>
+  <div class="example"><div class="label">WORKED EXAMPLE · turning point of y = x² − 6x + 5</div>
+    <div class="step"><span class="what">Differentiate</span><span class="line">dy/dx = 2x − 6</span></div>
+    <div class="step"><span class="what">Slope is zero</span><span class="line">2x − 6 = 0</span></div>
+    <div class="step"><span class="what">Add 6 to both sides</span><span class="line">2x = 6</span></div>
+    <div class="step"><span class="what">Divide both sides by 2</span><span class="line">x = 3</span></div>
+    <div class="step"><span class="what">Find y there</span><span class="line">y = 9 − 18 + 5 = −4, so the point is (3, −4)</span></div>
+  </div>
+  <div class="watch"><b>Solving dy/dx = 0.</b> Undo one operation at a time, and whatever you do to one side, do to the other. Moving a number across the equals sign changes its sign: adding becomes subtracting.</div>
+  <div class="foot"><span>A Little Calculus</span><span>7</span></div>
+</div>
+
+<!-- 4 · Slopes and turning points: practice -->
+<div class="page">
+  <div class="crumb">CHAPTER 4 · PRACTICE</div>
+  <h2>Practice: slopes and turning points</h2>
+  <p class="lead">Differentiate first. Then substitute, or set the slope to zero.</p>
+  <div class="problem tall"><div class="num">9.</div><div class="ask">Find the slope of the curve at x = 2.</div><div class="math">y = x³ − 2x</div><div class="work"></div></div>
+  <div class="problem tall"><div class="num">10.</div><div class="ask">Find the x value of the turning point.</div><div class="math">y = x² − 8x + 3</div><div class="work"></div></div>
+  <div class="problem tall"><div class="num">11.</div><div class="ask">Find the turning point (x and y).</div><div class="math">y = 2x² + 4x − 1</div><div class="work"></div></div>
+  <div class="foot"><span>A Little Calculus</span><span>8</span></div>
+</div>
+
+<!-- Answers -->
+<div class="page">
+  <div class="crumb">ANSWERS</div>
+  <h1>Answers</h1>
+  <p class="lead">Final answers only. If yours is different, go back through your working one line at a time, or ask Halo why you're stuck.</p>
+  <div class="key">
+    <div class="sub">CHAPTER 1</div>
+    <div><span>1.</span>inside 5x + 2, outside ( )³</div>
+    <div><span>2.</span>inside x³ − 4, outside ( )²</div>
+    <div class="sub">CHAPTER 2</div>
+    <div><span>3.</span>5x⁴</div>
+    <div><span>4.</span>12x³ − 2</div>
+    <div><span>5.</span>3x² − 12x + 9</div>
+    <div></div>
+    <div class="sub">CHAPTER 3</div>
+    <div><span>6.</span>6x(x² + 1)²</div>
+    <div><span>7.</span>12(3x − 2)³</div>
+    <div><span>8.</span>10(2x + 5)⁴</div>
+    <div></div>
+    <div class="sub">CHAPTER 4</div>
+    <div><span>9.</span>slope 10</div>
+    <div><span>10.</span>x = 4</div>
+    <div><span>11.</span>(−1, −3)</div>
+  </div>
+  <div class="foot"><span>A Little Calculus</span><span>9</span></div>
+</div>
+</body></html>
