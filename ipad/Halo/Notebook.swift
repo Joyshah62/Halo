@@ -121,7 +121,9 @@ private struct NotePage: View {
             if showsEnhanced, let enhanced = entry.enhanced {
                 ZStack(alignment: .bottom) {
                     // While Halo's card is up, the notes get room underneath so every part can be scrolled clear of it.
-                    ScrollView { EnhancedNoteView(store: store, entry: entry, note: enhanced, stale: stale, circling: $circling).padding(.horizontal, 34).padding(.bottom, askingHalo ? 460 : 60) }
+                    ScrollView { EnhancedNoteView(store: store, entry: entry, note: enhanced, stale: stale, circling: $circling).padding(.horizontal, 34)
+                        // Room at the end for Halo's avatar in the corner (74 pt + its margin), so the last row (Share) scrolls clear of it.
+                        .padding(.bottom, askingHalo ? 460 : 130) }
                         .scrollDisabled(circling)
                     if let draft = store.refine, draft.noteID == entry.id, case .enhanced = draft.target {
                         RefineCard(store: store, draft: draft, keepTitle: "Replace", keep: { store.applyEnhancedRefine(below: false) },

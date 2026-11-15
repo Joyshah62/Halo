@@ -168,7 +168,7 @@ if (!(window as any).__halo) {
       const payload: AskPayload = { question, selectionMode: session.selectionMode, conversation: session.conversation.slice(-20),
         image: session.selectionMode === "crop" ? capture?.image : undefined, imageMime: capture?.imageMime, contextImage: capture?.contextImage,
         circledText: session.circledText, pageText: session.pageText, pageTitle: session.title, pageUrl: session.url,
-        tutorMode: settings.tutorMode, previousAnswer: session.previous?.text, parentId: session.previous?.id };
+        supports3D: true, tutorMode: settings.tutorMode, previousAnswer: session.previous?.text, parentId: session.previous?.id };
       void sendRuntimeMessage({ type: "ACTIVITY", kind: "question", text: question }).catch(() => {});
       const currentPlayer = new Player(settings.voiceOut); player = currentPlayer;
       const answer: string[] = [];

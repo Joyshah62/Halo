@@ -222,6 +222,7 @@ struct DiveBoard: View {
     @ViewBuilder private var explanation: some View {
         if let answer = dive.answer {
             VStack(alignment: .leading, spacing: 22) {
+                if let scene = answer.scene3d, scene.isSupported { Scene3DCard(store: store, scene: scene) }
                 ForEach(Array(answer.sections.enumerated()), id: \.offset) { index, section in
                     HStack(alignment: .top, spacing: 14) {
                         Text("\(index + 1)").font(.custom("Caveat-Regular", size: 34)).foregroundStyle(HaloStyle.coral).frame(width: 24, alignment: .leading).offset(y: -6)

@@ -3,8 +3,9 @@
 import { generateImage } from "./llm.js";
 import { speak } from "./tts.js";
 import { typeset } from "./notation.js";
+import { cleanScene3D } from "../shared/scene3d/schema.js";
 
-const INK_TYPES = new Set(["text", "arrow", "underline", "box", "check", "cross", "sketch", "image", "point", "math", "code"]);
+const INK_TYPES = new Set(["text", "arrow", "underline", "box", "check", "cross", "sketch", "image", "point", "math", "code", "scene3d"]);
 const POINT_STYLES = new Set(["highlight", "underline", "circle"]);
 
 /** One raw model object → a clean step, or null when it isn't one. */
@@ -12,6 +13,10 @@ export function cleanStep(obj) {
   if (!obj || typeof obj.say !== "string") return null;
   const ink = Array.isArray(obj.ink)
     ? obj.ink.filter((i) => i && INK_TYPES.has(i.type)).filter((i) => i.type !== "point" || typeof i.quote === "string" || Number.isInteger(i.line)).slice(0, 5).map((i) => {
+        if (i.type === "scene3d") {
+          const scene = cleanScene3D(i);
+          return scene ? { type: "scene3d", ...scene } : null;
+        }
         if (i.type === "point") {
           // A mark on the printed page: found by its exact text (asks) or by a line of the checked working (checks).
           // `page` is set when the text is on another page of the book ("why am I stuck?" sends them there).
@@ -32,7 +37,7 @@ export function cleanStep(obj) {
         // Formulas and code are typeset here into a picture (with its natural size), so every client can show them.
         if (i.type === "math" || i.type === "code") return typeset(i);
         return i;
-      })
+      }).filter(Boolean)
     : [];
   return { say: despeak(obj.say), ink, ...(["source", "visual", "example"].includes(obj.focus) ? { focus: obj.focus } : {}) };
 }

@@ -20,42 +20,56 @@ struct LandingView: View {
     }
     private let features: [Feature] = [
         Feature(id: 0, icon: "sparkles", title: "It reads it first",
-                detail: "Import slides or a book and Halo reads it before you do: the three ideas to keep, where it gets hard, and where to start. Books are briefed a chapter at a time.",
+                detail: "The key ideas, and where to start.",
                 scribble: "start at page 7", accent: HaloStyle.coral),
-        Feature(id: 1, icon: "circle.dashed", title: "Circle and ask, out loud",
-                detail: "Loop anything with the Pencil and just ask. Halo answers in its voice, writes beside your circle, and highlights the lines on the page it’s talking about.",
+        Feature(id: 1, icon: "circle.dashed", title: "Circle and ask",
+                detail: "Loop anything with the Pencil and just ask.",
                 scribble: "outside′ × inside′", accent: HaloStyle.ink),
         Feature(id: 2, icon: "pencil.and.scribble", title: "It watches you work",
-                detail: "Solve by hand on the page. When you pause, Halo checks each line: a ✓ when it’s right, and a circle with a spoken hint (never the answer) when it isn’t.",
+                detail: "A ✓ when you’re right, a hint when you’re not.",
                 scribble: "2x = 7 − 3  ✓", accent: Color(red: 0.13, green: 0.55, blue: 0.35)),
-        Feature(id: 3, icon: "square.and.pencil", title: "Your notes, made better",
-                detail: "Type or handwrite your own notes, however rough, with or without a PDF open. Enhance organizes them, fills the gaps, fixes what’s wrong and adds a diagram where one helps.",
+        Feature(id: 3, icon: "square.and.pencil", title: "Better notes",
+                detail: "Rough notes in, tidy notes out.",
                 scribble: "✦ enhanced", accent: Color(red: 0.71, green: 0.33, blue: 0.04)),
-        Feature(id: 4, icon: "list.clipboard", title: "A summary to revise from",
-                detail: "Every question you asked and how it was explained, cleaned up and grouped by chapter. Tap any note to jump back to its page.",
+        Feature(id: 4, icon: "list.clipboard", title: "A recap to revise from",
+                detail: "Everything you asked, by chapter.",
                 scribble: "today · 6 questions", accent: HaloStyle.ink),
         Feature(id: 5, icon: "person.crop.circle", title: "It knows you",
-                detail: "Your course, your level, how you like things explained, and what you’ve been stuck on lately shape every answer. Turn on Tutor for hints instead of answers.",
+                detail: "Answers shaped to your course and level.",
                 scribble: "same idea as last week", accent: HaloStyle.coral),
     ]
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 34) {
-                hero.arrives(0)
-                ask.arrives(1)
-                actions.arrives(2)
-                if !store.documents.isEmpty { shelf.arrives(3) }
-                grid
-                footer
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 34) {
+                    hero.arrives(0)
+                    ask.arrives(1)
+                    actions.arrives(2)
+                    models.arrives(3)
+                    if !store.documents.isEmpty { shelf.arrives(3) }
+                    grid.id("features")
+                    footer
+                }
+                .padding(.horizontal, 32).padding(.top, 36).padding(.bottom, 48)
+                .frame(maxWidth: 1040)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 32).padding(.top, 36).padding(.bottom, 48)
-            .frame(maxWidth: 1040)
-            .frame(maxWidth: .infinity)
+            // `--scroll-features`: open scrolled down to "What Halo does", for screenshots.
+            .task {
+                guard CommandLine.arguments.contains("--scroll-features") else { return }
+                try? await Task.sleep(for: .milliseconds(1200)); proxy.scrollTo("features", anchor: .top)
+            }
         }
         .background(DeskPaper().ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
         .onAppear { greetedAt = Date() }
+    }
+
+    // MARK: things to hold: the 3D models
+    /// One way in to every model: it opens on the brain, and the neuron and cell are a tap away inside.
+    private var models: some View {
+        Scene3DCard(store: store, scene: Scene3DSpec(model: "brain"), featured: true, gallery: true).frame(maxWidth: 760)
     }
 
     // MARK: hero: Halo says hello
@@ -83,7 +97,7 @@ struct LandingView: View {
     private static let ideas = ["Why is the sky blue?", "How does CRISPR edit a gene?", "Why does the chain rule multiply?", "Show me a video on black holes"]
     private var ask: some View {
         VStack(spacing: 12) {
-            HaloComposer(text: $question, prompt: "Ask Halo…", send: look)
+            LandingAsk(store: store, speech: store.speech, question: $question, send: look)
             FlowRow(spacing: 8) {
                 ForEach(Self.ideas, id: \.self) { idea in
                     Button { store.askHalo(idea) } label: {
@@ -92,7 +106,7 @@ struct LandingView: View {
                     }.buttonStyle(.plain)
                 }
             }
-            Text("I look it up, explain it with sources, pin up real pictures and find the right moment in a video.")
+            Text("Type or tap the mic and just ask.")
                 .font(HaloKit.text(14)).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
         .frame(maxWidth: 720)
@@ -196,12 +210,12 @@ struct LandingView: View {
                 Text("\(feature.id + 1)").font(HaloKit.hand(34)).foregroundStyle(feature.accent.opacity(0.55))
             }
             Text(feature.title).font(HaloKit.title(19, .semibold)).foregroundStyle(HaloStyle.text)
-            Text(feature.detail).font(HaloKit.text(14.5)).foregroundStyle(.secondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+            Text(feature.detail).font(HaloKit.text(14.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Text(feature.scribble).hand(23).foregroundStyle(HaloStyle.ink).rotationEffect(.degrees(-1.5))
         }
         .padding(20)
-        .frame(maxWidth: .infinity, minHeight: 236, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 176, alignment: .topLeading)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .shadow(color: .black.opacity(0.06), radius: 16, y: 7)
         .accessibilityElement(children: .combine)
@@ -214,5 +228,62 @@ struct LandingView: View {
             Text("Your documents and notes stay on this iPad. What you circle or ask about is sent to your Halo server.")
         }
         .font(HaloKit.text(12)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 560)
+    }
+}
+
+/// The start screen's ask bar, with a microphone: say the question, and Halo takes it when you pause.
+/// The microphone is borrowed from circle-and-ask and handed back afterwards.
+@MainActor
+private struct LandingAsk: View {
+    @ObservedObject var store: StudyStore
+    @ObservedObject var speech: SpeechInput
+    @Binding var question: String
+    var send: () -> Void
+    @State private var listening = false
+    @State private var silence: Task<Void, Never>?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HaloComposer(text: $question, prompt: listening ? "Listening…" : "Ask Halo…", recording: listening,
+                         microphone: toggle, send: send)
+            if listening {
+                Text(question.isEmpty ? "I’m listening. Ask me anything." : "pause when you’re done")
+                    .font(HaloKit.hand(22)).foregroundStyle(HaloStyle.coral).transition(.opacity)
+            }
+            if let problem = speech.lastError, !listening { Text(problem).font(HaloKit.text(12)).foregroundStyle(.red) }
+        }
+        .animation(.spring(duration: 0.3), value: listening)
+        .onDisappear { if listening { stop(asking: false) } }
+    }
+
+    private func toggle() {
+        if listening { speech.stop(); return }
+        question = ""
+        speech.onTranscript = { text in heard(text) }
+        speech.onStopped = { stopped() }
+        listening = true
+        Task {
+            await speech.requestPermissions()
+            do { try await speech.start() } catch { stop(asking: false) }
+        }
+    }
+    private func heard(_ text: String) {
+        guard listening else { return }
+        question = text
+        // A pause after speech means the question is finished.
+        silence?.cancel()
+        silence = Task {
+            try? await Task.sleep(for: .milliseconds(1600))
+            guard !Task.isCancelled, listening, !question.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+            speech.stop()
+        }
+    }
+    private func stopped() { stop(asking: true) }
+    private func stop(asking: Bool) {
+        let was = listening
+        silence?.cancel(); listening = false
+        store.restoreSpeech()
+        if speech.isRecording { speech.stop() }
+        if was, asking, !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { send() }
     }
 }

@@ -1,4 +1,5 @@
 import type { InkItem } from "./types";
+import { cleanScene3D } from "../../../shared/scene3d/schema.js";
 
 export interface DisplayMessage { role: "user" | "assistant"; text: string; ink?: InkItem[] }
 export interface ConversationSnapshot {
@@ -32,6 +33,7 @@ export class ConversationView {
   private stop: HTMLButtonElement;
   private move: HTMLButtonElement;
   private signature = "";
+  private messageSignatures: string[] = [];
   private sessionSignature = "";
   private id = -1;
   private pendingDraft: string | null = null;
@@ -95,16 +97,23 @@ export class ConversationView {
     if (changed || signature !== this.signature) {
       const nearBottom = this.thread.scrollHeight - this.thread.scrollTop - this.thread.clientHeight < 70;
       this.signature = signature;
-      this.thread.replaceChildren();
+      // Keep unchanged messages mounted: advancing narration must not reset a model
+      // the student is already rotating or create a fresh WebGL context for it.
+      if (changed || !state.messages.length || !this.messageSignatures.length) this.thread.replaceChildren();
       if (!state.messages.length) { const empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "Your page stays clear. Explore the explanation here."; this.thread.appendChild(empty); }
-      for (const message of state.messages) {
+      const messageSignatures = state.messages.map(message => JSON.stringify(message));
+      for (const [index, message] of state.messages.entries()) {
+        if (!changed && this.messageSignatures[index] === messageSignatures[index] && this.thread.children[index]) continue;
         const el = document.createElement("article"); el.className = `message ${message.role}`;
         const who = document.createElement("div"); who.className = "who"; who.textContent = message.role === "user" ? "You" : "Halo";
         const text = document.createElement("div"); text.textContent = message.text;
         el.append(who, text);
         if (message.ink?.length) this.renderInk(el, message.ink);
-        this.thread.appendChild(el);
+        const existing = this.thread.children[index];
+        if (existing) existing.replaceWith(el); else this.thread.appendChild(el);
       }
+      if (state.messages.length) while (this.thread.children.length > state.messages.length) this.thread.lastElementChild?.remove();
+      this.messageSignatures = messageSignatures;
       if (changed || nearBottom) this.thread.scrollTop = this.thread.scrollHeight;
     }
     const sessions = JSON.stringify(state.sessions);
@@ -132,6 +141,15 @@ export class ConversationView {
         for (const d of item.paths) { const path = document.createElementNS(ns, "path"); path.setAttribute("d", d); path.setAttribute("fill", "none"); path.setAttribute("stroke", "currentColor"); path.setAttribute("stroke-width", "1.8"); svg.appendChild(path); }
         for (const label of item.labels) { const text = document.createElementNS(ns, "text"); text.setAttribute("x", String(label.x)); text.setAttribute("y", String(label.y)); text.setAttribute("fill", "currentColor"); text.setAttribute("font-size", "11"); text.textContent = label.text; svg.appendChild(text); }
         ink.appendChild(svg);
+      } else if (item.type === "scene3d") {
+        const spec = cleanScene3D(item);
+        if (spec) {
+          const frame = document.createElement("iframe");
+          frame.src = `${chrome.runtime.getURL("scene3d.html")}#${encodeURIComponent(JSON.stringify(spec))}`;
+          frame.title = `Explore ${spec.model === "brain" ? "the human brain" : spec.model === "neuron" ? "a neuron" : "an animal cell"} in 3D`;
+          frame.loading = "lazy"; frame.style.cssText = "width:100%;height:720px;border:0;border-radius:10px;background:#faf9f4";
+          ink.appendChild(frame);
+        }
       } else if (item.type === "image" && item.data && /^image\/(png|jpeg|webp)$/.test(item.mime || "")) {
         const image = document.createElement("img"); image.src = `data:${item.mime};base64,${item.data}`; image.alt = item.prompt; ink.appendChild(image);
       } else if (item.type === "check" || item.type === "cross") { const mark = document.createElement("span"); mark.textContent = item.type === "check" ? "✓" : "✗"; ink.appendChild(mark); }
