@@ -16,3 +16,6 @@ voice-samples/
 
 server/logs/
 server/lessons.sqlite*
+
+__pycache__/
+*.pyc
