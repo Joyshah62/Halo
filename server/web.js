@@ -136,7 +136,7 @@ async function resolveSource(chunk) {
   return { title: title || site || host, url, site: host };
 }
 
-export async function answer({ question, topic, context, learner, narrate = true, concise = false }) {
+export async function answer({ question, topic, context, learner, narrate = true, concise = false, brief = false }) {
   const q = clip(question, 300) || `Explain ${clip(topic, 80)} in detail`;
   if (isMock()) {
     return { sections: [{ heading: "Offline", text: "The Halo server is in mock mode, so nothing was searched. Start it with a Gemini key to see a real answer with sources.", cites: [] }],
@@ -152,9 +152,15 @@ export async function answer({ question, topic, context, learner, narrate = true
       context && `What they were looking at when they asked (their slide, book or notes):\n"""${clip(context, 2500)}"""`,
       learnerLine(learner),
     ].filter(Boolean).join("\n\n"),
-    config: { systemInstruction: ANSWER_SYSTEM + (concise ? "\nFor this request, use only TWO short sections: the core idea and one concrete example, at most 160 words total. Search for and cite university teaching pages, original authoritative sources, or open textbooks such as OpenStax and LibreTexts. Do not use Scribd, CourseHero, Chegg, Studocu, or YouTube as reading sources. Omit the SAY line." : ""), tools: [{ googleSearch: {} }], thinkingConfig: thinking(), maxOutputTokens: 1800, temperature: 0.4 },
+    config: { systemInstruction: ANSWER_SYSTEM + (concise ? "\nFor this request, use only TWO short sections: the core idea and one concrete example, at most 160 words total. Search for and cite university teaching pages, original authoritative sources, or open textbooks such as OpenStax and LibreTexts. Do not use Scribd, CourseHero, Chegg, Studocu, or YouTube as reading sources. Omit the SAY line." : "") + (brief ? BRIEF : ""), tools: [{ googleSearch: {} }], thinkingConfig: thinking(), maxOutputTokens: 1800, temperature: 0.4 },
   });
   const out = parseAnswer(r.text || "");
+  if (brief) {
+    // Two or three lines on the board, two sentences out loud, even if the model wrote more.
+    const sentences = (text, n) => (String(text).match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [text]).slice(0, n).join("").trim();
+    out.sections = out.sections.slice(0, 1).map((s) => ({ ...s, text: sentences(s.text, 3) }));
+    out.say = sentences(out.say, 2);
+  }
   if (!out.sections.length) throw new Error("Halo couldn't put an answer together. Try asking again.");
   const meta = r.candidates?.[0]?.groundingMetadata || {};
   const chunks = Array.isArray(meta.groundingChunks) ? meta.groundingChunks : [];
@@ -176,6 +182,9 @@ export async function answer({ question, topic, context, learner, narrate = true
   console.log(`[dive] answer "${q.slice(0, 50)}" ${out.sections.length} sections, ${sources.length} sources in ${Date.now() - t0}ms`);
   return { ...out, audio, sources, searches: (meta.webSearchQueries || []).map((s) => clip(s, 80)).slice(0, 4) };
 }
+
+// Short answers (the demo document): the board and the voice both get to the point.
+const BRIEF = "\nFor this request, keep it SHORT (this overrides the shape above): ONE section only, its paragraph 2 or 3 short sentences, at most 50 words. TAKEAWAY is one short sentence. SAY is one or two short sentences, at most 25 words.";
 
 // ---------- videos ----------
 const seconds = (length) => String(length || "").split(":").reduce((total, part) => total * 60 + (Number(part) || 0), 0);

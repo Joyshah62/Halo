@@ -566,16 +566,42 @@ const webRoute = (name, run) => async (req, res) => {
   try { res.json(await run(req.body ?? {})); }
   catch (e) { console.error(`[dive] ${name} error`, e); res.status(500).json({ error: e.message || String(e) }); }
 };
+// Lookups for the demo document are recorded and replayed (replay.js), and its answers are kept short.
 // POST /api/dive/plan { question, context?, document?, learner? } → { title, say, web, video, wiki, image }
-app.post("/api/dive/plan", webRoute("plan", (b) => web.plan(b)));
+app.post("/api/dive/plan", webRoute("plan", async (b) => {
+  if (!replay.inScope(b.document, b.context)) return web.plan(b);
+  const kept = replay.webCached("plan", b);
+  if (kept) return kept;
+  const plan = await web.plan(b);
+  replay.saveWeb("plan", b, plan);
+  replay.allowWeb(b.question, plan.say, plan.web, plan.video, plan.wiki, plan.image);
+  return plan;
+}));
 // POST /api/dive/answer { question, topic?, context?, learner? } → { sections: [{ heading, text, cites: [n] }], takeaway, say, next: [question], audio, sources: [{ title, url, site }], searches }
-app.post("/api/dive/answer", webRoute("answer", (b) => web.answer(b)));
+app.post("/api/dive/answer", webRoute("answer", async (b) => {
+  if (!replay.inScope(b.document, b.context) && !replay.webAllowed(b.question)) return web.answer(b);
+  const kept = replay.webCached("answer", b);
+  if (kept) return kept;
+  const answer = await web.answer({ ...b, brief: true });
+  replay.saveWeb("answer", b, answer);
+  replay.allowWeb(b.question, answer.say, ...(answer.next || []));
+  return answer;
+}));
+// Videos, moments, pictures and voice clips are kept only when they use words a recorded plan chose.
+const keptLookup = (kind, inScope, run, worth = (value) => value != null) => webRoute(kind, async (b) => {
+  if (!inScope(b)) return run(b);
+  const kept = replay.webCached(kind, b);
+  if (kept) return kept;
+  const value = await run(b);
+  if (worth(value)) replay.saveWeb(kind, b, value);
+  return value;
+});
 // POST /api/dive/videos { query } → { videos: [{ id, title, channel, length, views }] }
-app.post("/api/dive/videos", webRoute("videos", async (b) => ({ videos: await web.videos(b.query) })));
+app.post("/api/dive/videos", keptLookup("videos", (b) => replay.webAllowed(b.query), async (b) => ({ videos: await web.videos(b.query) }), (v) => v.videos?.length));
 // POST /api/dive/moment { videoId, question, title? } → { moment: { start, why } | null }: Halo watches the video for the student
-app.post("/api/dive/moment", webRoute("moment", async (b) => ({ moment: await web.moment(b) })));
+app.post("/api/dive/moment", keptLookup("moment", (b) => replay.webAllowed(b.question), async (b) => ({ moment: await web.moment(b) }), (v) => v.moment));
 // POST /api/dive/images { wiki?, query?, question? } → { images: [{ thumb, title, credit, license, page, width, height }] }
-app.post("/api/dive/images", webRoute("images", async (b) => ({ images: await web.images(b) })));
+app.post("/api/dive/images", keptLookup("images", (b) => replay.webAllowed(b.wiki, b.query, b.question), async (b) => ({ images: await web.images(b) }), (v) => v.images?.length));
 // GET /api/dive/picture?u=<address> → the picture itself, fetched by the server. A fallback for when the iPad can't reach
 // a picture host directly (school Wi-Fi, the simulator). Only the hosts the board uses are allowed.
 const PICTURE_HOSTS = /^(i\.ytimg\.com|(?:upload|thumb)\.wikimedia\.org|www\.google\.com)$/;
@@ -590,7 +616,7 @@ app.get("/api/dive/picture", async (req, res) => {
   } catch { res.status(502).end(); }
 });
 // POST /api/speak { text } → { audio: base64 | null }
-app.post("/api/speak", webRoute("speak", async (b) => ({ audio: typeof b.text === "string" && b.text.trim() ? await speak(despeak(b.text).slice(0, 400)) : null })));
+app.post("/api/speak", keptLookup("speak", (b) => replay.webAllowed(b.text), async (b) => ({ audio: typeof b.text === "string" && b.text.trim() ? await speak(despeak(b.text).slice(0, 400)) : null }), (v) => v.audio));
 
 // ---------- Teach me this chapter: a LangGraph lesson that pauses for the student's answers (see lesson.js) ----------
 // Both routes stream text/event-stream:

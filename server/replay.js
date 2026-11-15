@@ -126,3 +126,32 @@ export function matchReply(node, reply) {
   }
   return best;
 }
+
+// ---------- web lookups ("Go deeper", web.js) ----------
+// Each lookup is one JSON file. The plan and the answer are in scope when they come from the demo document; the
+// videos, video moments, pictures and voice clips are in scope when they use words a recorded plan chose.
+const WEB_SCOPE = "web-scope.json";
+const webKey = (kind, body) => {
+  const n = (field, max = 4000) => norm(body?.[field]).slice(0, max);
+  const parts = {
+    plan: [n("question"), n("context", 1500), n("document")],
+    answer: [n("question"), n("topic"), n("context", 2500)],
+    videos: [n("query")],
+    moment: [String(body?.videoId || ""), n("question")],
+    images: [n("wiki"), n("query"), n("question")],
+    speak: [String(body?.text || "").trim()],
+  }[kind];
+  return `web-${kind}-${hash(parts)}.json`;
+};
+export const webCached = (kind, body) => read(webKey(kind, body))?.value;
+export function saveWeb(kind, body, value) {
+  write(webKey(kind, body), { kind: `web-${kind}`, at: new Date().toISOString(), value });
+}
+/** Marks search words, questions and spoken lines as belonging to the demo, so the lookups that use them are kept. */
+export function allowWeb(...texts) {
+  const scope = new Set(read(WEB_SCOPE)?.texts || []);
+  const before = scope.size;
+  for (const text of texts) if (norm(text)) scope.add(norm(text));
+  if (scope.size !== before) write(WEB_SCOPE, { texts: [...scope].slice(-2000) });
+}
+export const webAllowed = (...texts) => replayEnabled() && texts.some((text) => norm(text) && (read(WEB_SCOPE)?.texts || []).includes(norm(text)));
