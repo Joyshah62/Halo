@@ -1,6 +1,8 @@
-# Halo — Crop & Ask
+# Halo — Circle & Ask
 
-**Any page can answer back.** A Chrome extension: crop a section or choose the whole page, ask by voice or text, and a tutor explains it with handwritten notes, diagrams, and voice in a side panel or movable card.
+**Any page can answer back.** Halo is a native iPad study companion and Chrome extension. Circle something in a PDF with Apple Pencil, or crop a section of a webpage, and ask by voice or text. Halo explains it with handwritten notes, diagrams, and a voice that follows each step.
+
+On iPad, Halo also watches your working, teaches chapters through conversation, turns your notes into quizzes and flash cards, and lets you explore anatomy in 3D.
 
 Built for HackPrinceton (Education track). Spec and plan: [Halo — Circle & Ask.md](./Halo%20—%20Circle%20%26%20Ask.md).
 
@@ -10,9 +12,56 @@ ipad/        Native SwiftUI iPad app: PDF reader, Pencil selection and notes, sa
 server/      Node/Express. Holds the API keys, calls Gemini (vision; Claude optional) + ElevenLabs, streams steps, logs topics.
 ```
 
-The native PDF-first iPad app is in [`ipad/`](./ipad/README.md). Open [`ipad/Halo.xcodeproj`](./ipad/Halo.xcodeproj) in full Xcode; setup and verification limits are documented there.
+## Halo on iPad
 
-## Run it (5 minutes)
+The native app puts the book and your working on the same desk. Explanations appear in a margin beside the PDF in landscape, or underneath it in portrait, while your circles, notes, and conversations stay attached to the page.
+
+| Feature | What you can do |
+|---|---|
+| Circle & Ask | Circle text, a formula, or a diagram with Apple Pencil or a finger, then ask a question and follow up on the same note. |
+| Read your document | Get a spoken overview, key ideas, suggested starting page, and marks on pages Halo expects to be tricky. |
+| Teach me this chapter | Work through a concept roadmap: make a guess, hear an explanation, answer a check, and get a different explanation when needed. |
+| Watch my working | Let Halo inspect handwritten math and point out a suspicious line with a hint. Gemini reads it; mathjs tests the steps before a second model review when needed. |
+| Why am I stuck? | Ask Halo to diagnose a missing concept, search the pages of your book, and point you to the relevant passage. |
+| My notes | Type or handwrite notes, organize and expand them with AI, add diagrams, and refine a circled section. Your original notes remain available. |
+| Quiz & flash cards | Generate practice from your notes, check answers, review cards, and see strengths and areas to revisit. |
+| Go deeper | Find a sourced web explanation, YouTube videos with suggested starting moments, and credited diagrams and photos. Save the results to your notes. |
+| Explore in 3D | Rotate and select parts of a brain, neuron, or animal cell. Ask about a part and watch Halo highlight it while explaining. |
+| Pick up where you left off | Reopen locally saved PDFs, Pencil drawings, notes, and conversations. Learner memory connects later lessons to earlier work. |
+
+### Run the iPad app
+
+Requires **iPadOS 17+**, a Mac with **full Xcode and an iOS simulator SDK**, and **Node.js 24+** for the backend. The Swift app has no third-party Swift dependencies.
+
+1. Start the backend using the server instructions below. Add `GEMINI_API_KEY` for live AI and `ELEVENLABS_API_KEY` for Halo's voice.
+2. Open [`ipad/Halo.xcodeproj`](./ipad/Halo.xcodeproj), select the **Halo** scheme and an iPad simulator, then Run.
+3. Open **Settings** in Halo, enter the server URL, and tap **Test**. Use `http://localhost:8787` in the simulator. On a physical iPad, use your Mac's local-network address, such as `http://your-mac.local:8787`, or a hosted HTTPS backend.
+4. Turn off **Offline sample answers** for live AI, then import a PDF or open the sample lesson. Word and PowerPoint imports additionally require LibreOffice on the backend.
+5. Try circling a passage and asking about it, or choose **Teach me this chapter**, **Start a note**, or one of the 3D models.
+
+You can explore the offline sample without API keys. The 3D models, rotation, selection, and built-in part descriptions also run locally. Live explanations, web research, and AI-generated study materials need the backend.
+
+For physical-device signing, simulator commands, and verification limits, see the [iPad README](./ipad/README.md).
+
+### How the iPad app connects
+
+```text
+SwiftUI + PDFKit + PencilKit
+          │ question, page text, crop/page images, recent conversation
+          ▼
+Node.js / Express backend ── Gemini: explanations, vision, diagrams
+          │               ├─ ElevenLabs: voice for each explanation step
+          │               ├─ LangGraph / Deep Agents: lessons and diagnosis
+          │               └─ Search, YouTube, Wikimedia: further reading
+          ▼
+SSE steps → handwriting, highlights, diagrams, and synchronized audio
+```
+
+The interactive 3D viewer uses **Three.js / WebGL inside a WKWebView**. Brain geometry comes from the BodyParts3D anatomical atlas, processed into bundled meshes; AI responses select known part IDs to highlight and reveal.
+
+PDFs, notes, and drawings are saved on the iPad. The server uses SQLite for question history and lesson checkpoints, and local files with optional Backboard synchronization for learner memory. Optional **AWS S3 stores uploaded file bytes and generated assets; MongoDB Atlas stores their URLs and metadata**. Ordinary PDF imports remain local; question screenshots, converted Office PDFs, and note diagrams can be stored automatically when cloud storage is configured. API keys stay on the backend.
+
+## Run the server and Chrome extension
 
 **Requires Node.js 24+** (the server uses built-in SQLite).
 
@@ -43,7 +92,7 @@ Chrome → `chrome://extensions` → Developer mode → **Load unpacked** → pi
 - In the side panel click **Enable mic** once (opens `setup.html`; grant mic access). Voice is recognised in the side panel so the permission is granted once, not per site.
 - Keep the side panel open while demoing: it is where voice input runs.
 
-## Use it
+## Use the Chrome extension
 
 | Action | How |
 |---|---|
