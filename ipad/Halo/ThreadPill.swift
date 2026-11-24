@@ -20,6 +20,7 @@ enum NoteMetrics {
 /// The store writes on whichever note is open through this.
 @MainActor
 protocol NoteAnimating: AnyObject {
+    func prepareToWrite(session: StudySession)
     func animate(session: StudySession, duration: TimeInterval) async
 }
 
@@ -385,6 +386,8 @@ final class NotePaperView: UIScrollView, NoteAnimating {
     private var signature = ""
     private var laidOutWidth: CGFloat = 0
     var followsPen = true
+    /// Pen position in view coordinates, for a parent scroll view that owns the page.
+    var onWritingPosition: ((CGFloat) -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -426,6 +429,15 @@ final class NotePaperView: UIScrollView, NoteAnimating {
         if switched || !followsPen { contentOffset = .zero } else { scrollToEnd(animated: true) }
     }
 
+    /// Reserve the new message before SwiftUI displays the updated session, avoiding a flash of finished ink.
+    func prepareToWrite(session: StudySession) {
+        guard let newest = session.messages.last, newest.role == "assistant" else { return }
+        epoch += 1
+        self.session = session
+        writing = newest.id
+        show(session)
+    }
+
     func animate(session: StudySession, duration: TimeInterval) async {
         guard let newest = session.messages.last, newest.role == "assistant" else { return }
         epoch += 1
@@ -461,6 +473,8 @@ final class NotePaperView: UIScrollView, NoteAnimating {
     private func follow(_ element: InkElement) {
         let box = element.bounds
         guard !box.isEmpty, bounds.height > 0 else { return }
+        onWritingPosition?((box.maxY + 16) * scale)
+        guard followsPen else { return }
         let bottom = min(contentSize.height, (box.maxY + 16) * scale)
         let target = max(0, bottom - bounds.height)
         if target > contentOffset.y + 1 { setContentOffset(CGPoint(x: 0, y: target), animated: true) }

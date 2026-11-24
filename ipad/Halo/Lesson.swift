@@ -49,6 +49,12 @@ final class LessonCoach: ObservableObject {
     private(set) var attention = "top"
     @Published private(set) var beat = 0
     private func look(_ place: String) { attention = place; beat += 1 }
+    @Published private(set) var writingY: CGFloat = 0
+    func followWriting(at y: CGFloat) {
+        guard busy, selected == current else { return }
+        writingY = y
+        look("writing-line")
+    }
     let speech = SpeechInput()
     weak var paper: NoteAnimating?
     private let client = HaloClient()
@@ -274,6 +280,10 @@ final class LessonCoach: ObservableObject {
             catch is CancellationError { try Task.checkCancellation() }
             catch { voice = false }
         }
+        // Silent playback and audio failures still finish the bubble before the next section writes.
+        let remaining = spokenAt.addingTimeInterval(spokenFor).timeIntervalSinceNow
+        if !rushing, remaining > 0 { try await Task.sleep(for: .seconds(remaining)) }
+        try Task.checkCancellation()
     }
     private func receive(_ event: LessonEvent) async throws {
         try Task.checkCancellation()
@@ -307,7 +317,6 @@ final class LessonCoach: ObservableObject {
         try Task.checkCancellation()
         var board = boards[current] ?? StudySession(number: current, pageIndex: 0, region: nil)
         board.messages.append(StudyMessage(role: "assistant", text: step.say, ink: step.ink, isDemo: demo))
-        boards[current] = board
         if let focus = step.focus, Self.exhibits.contains(focus) {
             // Halo reaches for this part of the desk: it appears (the first time) and takes the spotlight.
             if !(shown[current] ?? []).contains(focus) { shown[current, default: []].append(focus) }
@@ -317,14 +326,19 @@ final class LessonCoach: ObservableObject {
         } else {
             look("notes-end")
         }
-        caption = step.say
+        // One changing section at a time: finish the explanation, then write its notes.
+        // The event consumer awaits both before revealing another step or concept.
         let duration = voice && !rushing ? player.duration(of: step) : rushing ? 0.3 : 0.8
+        try await say(step.say, audio: step.audio)
+        spokenFor = 0
+        if selected == current { paper?.prepareToWrite(session: board) }
+        boards[current] = board
         // Let SwiftUI mount the board before asking its ink renderer to animate.
         await Task.yield()
-        let snapshot = board
-        async let drawing: Void = paper?.animate(session: snapshot, duration: duration) ?? ()
-        try await say(step.say, audio: step.audio)
-        await drawing
+        try Task.checkCancellation()
+        guard selected == current else { return }
+        await paper?.animate(session: board, duration: duration)
+        try Task.checkCancellation()
     }
 
     // A clearly labelled, local sample. Imported documents always need the live tutor.
@@ -480,7 +494,7 @@ struct LessonBoard: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: coach.selected)
         }
         .sheet(isPresented: $source) { sourcePage }
-        .onDisappear { coach.hush() }
+        .onDisappear { following?.cancel(); coach.hush() }
         .onChange(of: coach.selected) { _, _ in showWeb = false }
         .onAppear { RemoteImageCache.relay = try? HaloClient.endpoint(store.serverURL, path: "api/dive/picture") }
     }
@@ -494,13 +508,15 @@ struct LessonBoard: View {
             guard important || Date().timeIntervalSince(touchedAt) > 4 else { return }
         }
         // Where the new thing sits on screen: the top of a card Halo picks up, the bottom of something that just grew.
-        let anchor: UnitPoint = place.hasSuffix("-end") ? UnitPoint(x: 0.5, y: 0.92) : place == "top" ? .top : UnitPoint(x: 0.5, y: 0.04)
+        let anchor: UnitPoint = (place.hasSuffix("-end") || place == "writing-line") ? UnitPoint(x: 0.5, y: 0.92) : place == "top" ? .top : UnitPoint(x: 0.5, y: 0.04)
         following?.cancel()
         following = Task { @MainActor in
             // Let the new card, move or line of notes lay out first, so the scroll lands on it rather than above it.
-            try? await Task.sleep(for: .milliseconds(90))
+            if place == "writing-line" { await Task.yield() }
+            else { try? await Task.sleep(for: .milliseconds(90)) }
             guard !Task.isCancelled else { return }
-            withAnimation(reduceMotion ? nil : .spring(duration: 0.55, bounce: 0.08)) { proxy.scrollTo(place, anchor: anchor) }
+            let motion: Animation = place == "writing-line" ? .easeOut(duration: 0.18) : .spring(duration: 0.55, bounce: 0.08)
+            withAnimation(reduceMotion ? nil : motion) { proxy.scrollTo(place, anchor: anchor) }
         }
     }
 
@@ -773,6 +789,7 @@ struct LessonBoard: View {
                         withAnimation(reduceMotion ? nil : .spring(duration: 0.35)) { coach.exampleMoves = moves + 1 }
                     } label: { Label(moves == 0 ? "Show the first move" : "Show the next move", systemImage: "plus.circle") }
                         .buttonStyle(PillButtonStyle(color: HaloStyle.ink, filled: false))
+                        .disabled(coach.busy)
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(example.result).font(HaloKit.title(27, .medium)).foregroundStyle(HaloStyle.ink).fixedSize(horizontal: false, vertical: true)
@@ -822,7 +839,7 @@ struct LessonBoard: View {
             }
         }
     }
-    /// Halo's own handwriting, written in time with its voice.
+    /// Halo's own handwriting, written after each explanation finishes.
     private var notepad: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
@@ -832,6 +849,14 @@ struct LessonBoard: View {
             }
             ZStack(alignment: .topLeading) {
                 LessonPaper(coach: coach, session: coach.board)
+                    .overlay(alignment: .topLeading) {
+                        VStack(spacing: 0) {
+                            Color.clear.frame(height: coach.writingY)
+                            Color.clear.frame(height: 1).id("writing-line")
+                            Spacer(minLength: 0)
+                        }
+                        .allowsHitTesting(false)
+                    }
                 if coach.board.messages.isEmpty {
                     Text("I'll jot things down here as we talk.").hand(23).foregroundStyle(HaloStyle.text.opacity(0.35)).padding(.top, 6)
                 }
@@ -1041,7 +1066,13 @@ private struct TrailLine: View {
 private struct LessonPaper: UIViewRepresentable {
     @ObservedObject var coach: LessonCoach
     let session: StudySession
-    func makeUIView(context: Context) -> NotePaperView { let view = NotePaperView(); view.isScrollEnabled = false; view.followsPen = false; coach.paper = view; return view }
+    func makeUIView(context: Context) -> NotePaperView {
+        let view = NotePaperView()
+        view.isScrollEnabled = false; view.followsPen = false
+        view.onWritingPosition = { [weak coach] y in coach?.followWriting(at: y) }
+        coach.paper = view
+        return view
+    }
     func updateUIView(_ view: NotePaperView, context: Context) { coach.paper = view; view.show(session) }
 }
 
