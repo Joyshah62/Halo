@@ -1,3 +1,4 @@
+import "./http-runtime.js";
 import "dotenv/config";
 import { installProcessLogging, requestLogging, log, errorDetails } from "./logging.js";
 import express from "express";

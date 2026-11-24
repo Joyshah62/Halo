@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node --no-warnings index.js",
-    "dev": "node --no-warnings --watch-preserve-output --watch-path=./index.js --watch-path=./prompt.js --watch-path=./llm.js --watch-path=./tts.js --watch-path=./db.js --watch-path=./tutor.js --watch-path=./mathcheck.js --watch-path=./web.js --watch-path=./steps.js --watch-path=./lesson-store.js --watch-path=./lesson.js --watch-path=./lesson-material.js --watch-path=./logging.js --watch-path=./sse.js --watch-path=./documents.js --watch-path=./stuck.js --watch-path=./learner-memory.js --watch-path=./notation.js --watch-path=./notes-quiz.js --watch-path=./storage.js index.js",
-    "test": "HALO_MEMORY_DIR=${TMPDIR:-/tmp}/halo-test-memory node --no-warnings --test *.test.mjs",
+    "dev": "node --no-warnings --watch-preserve-output --watch-path=./http-runtime.js --watch-path=./index.js --watch-path=./prompt.js --watch-path=./llm.js --watch-path=./tts.js --watch-path=./db.js --watch-path=./tutor.js --watch-path=./mathcheck.js --watch-path=./web.js --watch-path=./steps.js --watch-path=./lesson-store.js --watch-path=./lesson.js --watch-path=./lesson-material.js --watch-path=./logging.js --watch-path=./sse.js --watch-path=./documents.js --watch-path=./stuck.js --watch-path=./learner-memory.js --watch-path=./notation.js --watch-path=./notes-quiz.js --watch-path=./storage.js index.js",
+    "test": "HALO_MEMORY_DIR=${TMPDIR:-/tmp}/halo-test-memory node --no-warnings --import ./http-runtime.js --test *.test.mjs",
     "check:storage": "node --no-warnings scripts/check-storage.mjs"
   },
   "keywords": [],
@@ -31,6 +31,7 @@
     "mathjax-full": "^3.2.2",
     "mathjs": "^15.2.0",
     "mongodb": "^7.9.0",
+    "undici": "8.13.1",
     "zod": "^4.6.7"
   },
   "engines": {
